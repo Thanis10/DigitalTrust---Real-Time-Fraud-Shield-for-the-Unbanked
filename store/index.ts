@@ -88,17 +88,29 @@ export const useTransactionStore = create<TransactionStore>((set) => ({
 interface WalletStore {
   walletBalance: number;
   transactionHistory: Transaction[];
+  latestRiskScore: number | null;
+  latestDecision: 'APPROVE' | 'FLAG' | 'BLOCK' | null;
+  latestExplanation: string | null;
   addWalletTransaction: (t: Transaction) => void;
   deductBalance: (amount: number) => void;
+  setTransactionResult: (score: number, decision: 'APPROVE' | 'FLAG' | 'BLOCK', explanation?: string) => void;
+  clearTransactionResult: () => void;
 }
 
 export const useWalletStore = create<WalletStore>((set) => ({
-  walletBalance: 12500.00,
+  walletBalance: 18475.00,
   transactionHistory: INITIAL_TRANSACTIONS.filter(t => t.user_id === 'USR-8821' && t.decision === 'APPROVE'),
+  latestRiskScore: null,
+  latestDecision: null,
+  latestExplanation: null,
   addWalletTransaction: (t) =>
     set((state) => ({ transactionHistory: [t, ...state.transactionHistory] })),
   deductBalance: (amount) =>
     set((state) => ({ walletBalance: state.walletBalance - amount })),
+  setTransactionResult: (score, decision, explanation) =>
+    set({ latestRiskScore: score, latestDecision: decision, latestExplanation: explanation || null }),    
+  clearTransactionResult: () =>
+    set({ latestRiskScore: null, latestDecision: null, latestExplanation: null })
 }));
 
 interface RiskStore {
