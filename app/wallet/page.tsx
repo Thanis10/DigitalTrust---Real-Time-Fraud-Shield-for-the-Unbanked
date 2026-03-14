@@ -1,10 +1,10 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { useWalletStore, Transaction } from '@/store';
+import { useWalletStore, Transaction, useTransactionStore } from '@/store';
 import Link from 'next/link';
 import { 
-  ChevronLeft, ArrowUpRight, ArrowDownLeft, ShoppingBag, Lock
+  ChevronLeft, ArrowUpRight, ArrowDownLeft, ShoppingBag, Lock, Wifi, WifiOff
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import Image from 'next/image';
@@ -47,14 +47,14 @@ function HomeDashboard({
   onSendClick, 
   onTopUpClick, 
   onReceiveClick, 
-  onMoveToVaultClick,
-  onVaultTransferClick
+  onVaultTransferClick,
+  isOffline
 }: { 
   onSendClick: () => void;
   onTopUpClick: () => void;
   onReceiveClick: () => void;
-  onMoveToVaultClick: () => void;
   onVaultTransferClick: (mode: 'deposit' | 'withdraw') => void;
+  isOffline: boolean;
 }) {
   const { transactionHistory, locationCurrency, latestDecision, latestExplanation, isUserVerified } = useWalletStore();
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
@@ -63,7 +63,7 @@ function HomeDashboard({
     ...transactionHistory.map(t => ({
       id: t.id,
       name: t.reason || 'Transfer',
-      desc: format(new Date(t.timestamp), 'MMM d, h:mm a'),
+      desc: `${format(new Date(t.timestamp), 'MMM d, h:mm a')}${t.account_type === 'VAULT' ? ' • Vault' : ''}`,
       amount: -t.amount, 
       icon: ArrowUpRight,
       color: 'text-indigo-400',
@@ -94,7 +94,15 @@ function HomeDashboard({
       exit={{ opacity: 0 }}
       className="space-y-8"
     >
-      <WalletHeader />
+      <div className="space-y-2">
+        <WalletHeader />
+        <div className="flex items-center gap-2">
+          <span className={`flex items-center gap-1.5 text-[10px] font-black px-3 py-1 rounded-full border uppercase tracking-widest ${isOffline ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400'}`}>
+            {isOffline ? <WifiOff className="w-3 h-3" /> : <Wifi className="w-3 h-3" />}
+            {isOffline ? 'Edge Safe Mode' : 'Real-time Online'}
+          </span>
+        </div>
+      </div>
       
       <div className="space-y-4">
         <MainWalletCard />
@@ -118,7 +126,6 @@ function HomeDashboard({
 
       <FinancialTipsCard />
 
-      {/* Recent Transactions Section */}
       <div className="pb-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-black text-white">Recent Activity</h3>
@@ -177,47 +184,113 @@ export default function WalletPage() {
   const [pendingVaultTransfer, setPendingVaultTransfer] = useState<boolean>(false);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('home');
+  const [isOffline, setIsOffline] = useState(false);
   
+  const addToDashboardFeed = useTransactionStore((state) => state.addTransaction);
+
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 2000);
     return () => clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setIsOffline(!window.navigator.onLine);
+    const goOnline = () => setIsOffline(false);
+    const goOffline = () => setIsOffline(true);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
+
   const { 
     latestDecision, latestRiskScore, latestExplanation, 
     setTransactionResult, clearTransactionResult,
-    deductBalance, addWalletTransaction, setShieldStatus, isUserVerified, setVerified
+    deductBalance, deductVault, addWalletTransaction, setShieldStatus, 
+    isUserVerified, setVerified, walletBalance, vaultBalance, lockVault, unlockVault
   } = useWalletStore();
 
   const processTransaction = async (data: any) => {
     setLoading(true);
     try {
-      const payload = {
+      const nowIso = new Date().toISOString();
+      const sourceBalance = data.account_type === 'VAULT' ? vaultBalance : walletBalance;
+
+      if (data.amount > sourceBalance) {
+        alert('Not enough balance.');
+        setLoading(false);
+        return;
+      }
+
+      const payload: any = {
         user_id: data.user_id,
         amount: data.amount,
         location: data.location,
         device_id: data.device_id,
-        timestamp: new Date().toISOString()
+        recipient: data.recipient,
+        transaction_type: data.account_type === 'VAULT' ? 'VAULT_WITHDRAWAL' : 'TRANSFER',
+        account_type: data.account_type,
+        currency: 'USD',
+        timestamp: nowIso,
+        oldbalance: sourceBalance,
+        newbalance: sourceBalance - data.amount
       };
+
+      // Phishing detection logic
+      const suspectedPhish = (() => {
+        if (typeof window === 'undefined') return false;
+        const recent = window.localStorage.getItem('recent_msg_text') || 'Your parcel is stuck, pay RM5 to unlock.';
+        return /parcel.*unlock|click.*link|verify.*account|bonus.*claim/i.test(recent);
+      })();
+
+      if (suspectedPhish) {
+        payload['phishing_flag'] = true;
+        payload['phishing_text'] = 'Recent suspicious message detected.';
+      }
 
       const res = await axios.post('/api/risk-score', payload);
       const result = res.data;
 
-      setTransactionResult(result.risk_score, result.decision, result.reason);
+      setTransactionResult({
+        score: result.risk_score,
+        decision: result.decision,
+        explanation: result.reason,
+        userMessage: result.user_message,
+        verification: result.verification?.method,
+        channel: result.channel || data.account_type,
+        confidence: result.confidence,
+        agentReport: result.agent_report,
+        edgeFallbackUsed: result.edge_fallback_used
+      });
       
+      const txId = `WTX-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+      const newTx: Transaction = {
+        id: txId,
+        user_id: payload.user_id,
+        recipient: data.recipient,
+        amount: data.amount, 
+        location: payload.location,
+        device_id: payload.device_id,
+        timestamp: payload.timestamp,
+        risk_score: result.risk_score,
+        decision: result.decision,
+        reason: result.reason || data.reference || 'Transfer',
+        confidence: result.confidence,
+        account_type: data.account_type
+      };
+
       if (result.decision === 'APPROVE') {
-        deductBalance(data.amount);
-        addWalletTransaction({
-          id: `WTX-${Math.random().toString(36).substring(2, 9).toUpperCase()}`,
-          user_id: payload.user_id,
-          amount: data.amount, 
-          location: payload.location,
-          device_id: payload.device_id,
-          timestamp: payload.timestamp,
-          risk_score: result.risk_score,
-          decision: result.decision,
-          reason: data.reference || 'Transfer'
-        });
+        if (data.account_type === 'VAULT') {
+          deductVault(data.amount);
+          unlockVault();
+        } else {
+          deductBalance(data.amount);
+        }
+        addWalletTransaction(newTx);
+        addToDashboardFeed(newTx);
         setIsSendModalOpen(false);
         setPendingTransaction(null);
         setShowResultModal(true);
@@ -226,6 +299,9 @@ export default function WalletPage() {
         setIsFraudAlertOpen(true);
         setIsSendModalOpen(false);
       } else if (result.decision === 'BLOCK') {
+        if (data.account_type === 'VAULT' || result.vault_locked) {
+          lockVault();
+        }
         setIsSendModalOpen(false);
         setPendingTransaction(null);
         setShowResultModal(true);
@@ -315,8 +391,8 @@ export default function WalletPage() {
                 onSendClick={() => setIsSendModalOpen(true)}
                 onTopUpClick={() => setIsTopUpOpen(true)}
                 onReceiveClick={() => setIsReceiveModalOpen(true)}
-                onMoveToVaultClick={() => handleVaultTransferRequest('deposit')}
                 onVaultTransferClick={handleVaultTransferRequest}
+                isOffline={isOffline}
               />
             )}
             {activeTab === 'analytics' && <AnalyticsView key="analytics" />}
