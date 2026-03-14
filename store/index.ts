@@ -3,9 +3,11 @@ import { create } from 'zustand';
 export type Transaction = {
   id: string;
   user_id: string;
+  recipient?: string;
   amount: number;
   location: string;
   device_id: string;
+  account_type?: 'MAIN' | 'VAULT';
   timestamp: string;
   risk_score: number;
   decision: 'APPROVE' | 'FLAG' | 'BLOCK';
@@ -87,30 +89,101 @@ export const useTransactionStore = create<TransactionStore>((set) => ({
 
 interface WalletStore {
   walletBalance: number;
+  vaultBalance: number;
+  vaultLocked: boolean;
   transactionHistory: Transaction[];
   latestRiskScore: number | null;
   latestDecision: 'APPROVE' | 'FLAG' | 'BLOCK' | null;
   latestExplanation: string | null;
+  latestUserMessage: string | null;
+  latestVerification: 'biometric' | 'whatsapp_otp' | 'none' | null;
+  latestChannel: 'MAIN' | 'VAULT' | null;
+  latestConfidence: number | null;
+  latestAgentReport: string | null;
+  edgeFallbackUsed: boolean;
   addWalletTransaction: (t: Transaction) => void;
   deductBalance: (amount: number) => void;
-  setTransactionResult: (score: number, decision: 'APPROVE' | 'FLAG' | 'BLOCK', explanation?: string) => void;
+  deductVault: (amount: number) => void;
+  moveToVault: (amount: number) => void;
+  releaseFromVault: (amount: number) => void;
+  lockVault: () => void;
+  unlockVault: () => void;
+  setTransactionResult: (data: {
+    score: number;
+    decision: 'APPROVE' | 'FLAG' | 'BLOCK';
+    explanation?: string;
+    userMessage?: string;
+    verification?: 'biometric' | 'whatsapp_otp' | 'none';
+    channel?: 'MAIN' | 'VAULT';
+    confidence?: number;
+    edgeFallbackUsed?: boolean;
+    agentReport?: string;
+  }) => void;
   clearTransactionResult: () => void;
 }
 
 export const useWalletStore = create<WalletStore>((set) => ({
   walletBalance: 18475.00,
+  vaultBalance: 4800.00,
+  vaultLocked: false,
   transactionHistory: INITIAL_TRANSACTIONS.filter(t => t.user_id === 'USR-8821' && t.decision === 'APPROVE'),
   latestRiskScore: null,
   latestDecision: null,
   latestExplanation: null,
+  latestUserMessage: null,
+  latestVerification: null,
+  latestChannel: null,
+  latestConfidence: null,
+  latestAgentReport: null,
+  edgeFallbackUsed: false,
   addWalletTransaction: (t) =>
     set((state) => ({ transactionHistory: [t, ...state.transactionHistory] })),
   deductBalance: (amount) =>
-    set((state) => ({ walletBalance: state.walletBalance - amount })),
-  setTransactionResult: (score, decision, explanation) =>
-    set({ latestRiskScore: score, latestDecision: decision, latestExplanation: explanation || null }),    
+    set((state) => ({ walletBalance: Math.max(0, state.walletBalance - amount) })),
+  deductVault: (amount) =>
+    set((state) => state.vaultLocked ? state : ({ vaultBalance: Math.max(0, state.vaultBalance - amount) })),
+  moveToVault: (amount) =>
+    set((state) => {
+      if (amount <= 0 || amount > state.walletBalance) return state;
+      return {
+        walletBalance: state.walletBalance - amount,
+        vaultBalance: state.vaultBalance + amount
+      };
+    }),
+  releaseFromVault: (amount) =>
+    set((state) => {
+      if (state.vaultLocked || amount <= 0 || amount > state.vaultBalance) return state;
+      return {
+        walletBalance: state.walletBalance + amount,
+        vaultBalance: state.vaultBalance - amount
+      };
+    }),
+  lockVault: () => set({ vaultLocked: true }),
+  unlockVault: () => set({ vaultLocked: false }),
+  setTransactionResult: ({ score, decision, explanation, userMessage, verification, channel, confidence, edgeFallbackUsed, agentReport }) =>
+    set({ 
+      latestRiskScore: score, 
+      latestDecision: decision, 
+      latestExplanation: explanation || null,
+      latestUserMessage: userMessage || null,
+      latestVerification: verification || null,
+      latestChannel: channel || null,
+      latestConfidence: typeof confidence === 'number' ? confidence : null,
+      latestAgentReport: agentReport || null,
+      edgeFallbackUsed: Boolean(edgeFallbackUsed)
+    }),    
   clearTransactionResult: () =>
-    set({ latestRiskScore: null, latestDecision: null, latestExplanation: null })
+    set({ 
+      latestRiskScore: null, 
+      latestDecision: null, 
+      latestExplanation: null,
+      latestUserMessage: null,
+      latestVerification: null,
+      latestChannel: null,
+      latestConfidence: null,
+      latestAgentReport: null,
+      edgeFallbackUsed: false
+    })
 }));
 
 interface RiskStore {

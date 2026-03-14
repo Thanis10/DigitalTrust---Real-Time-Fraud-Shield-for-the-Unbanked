@@ -7,7 +7,7 @@ import {
   ChevronLeft, UserCircle, Eye, EyeOff, 
   ArrowUpRight, ArrowDownToLine, Plus, MoreHorizontal, 
   Zap, Percent, Gift, ArrowRight, ShoppingBag, ArrowDownLeft,
-  CreditCard, TrendingUp, Award
+  CreditCard, TrendingUp, Award, ShieldCheck, WifiOff, Wifi, Cpu, LockKeyhole, Unlock
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import Image from 'next/image';
@@ -24,6 +24,7 @@ import RiskResultModal from '@/components/wallet/RiskResultModal';
 import BottomNavigation, { TabType } from '@/components/wallet/BottomNavigation';
 import TopUpModal from '@/components/wallet/TopUpModal';
 import TransactionDetailsModal from '@/components/wallet/TransactionDetailsModal';
+import { useTransactionStore } from '@/store';
 
 const PROMOS = [
   {
@@ -64,8 +65,8 @@ const STATIC_MOCK_TXNS = [
   { id: '3', name: 'Salary', desc: 'Yesterday', amount: 2000.00, icon: ArrowDownLeft, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
 ];
 
-function HomeDashboard({ onSendClick }: { onSendClick: () => void }) {
-  const { walletBalance, transactionHistory } = useWalletStore();
+function HomeDashboard({ onSendClick, isOffline }: { onSendClick: () => void; isOffline: boolean }) {
+  const { walletBalance, vaultBalance, vaultLocked, transactionHistory, moveToVault, releaseFromVault, latestExplanation, latestDecision } = useWalletStore();
   
   // Header State
   const currentDate = format(new Date(), 'MMMM d, yyyy');
@@ -80,6 +81,7 @@ function HomeDashboard({ onSendClick }: { onSendClick: () => void }) {
 
   // Transactions State
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const [vaultAmount, setVaultAmount] = useState<number>(50);
 
   // Balance Animation
   useEffect(() => {
@@ -110,7 +112,7 @@ function HomeDashboard({ onSendClick }: { onSendClick: () => void }) {
     ...transactionHistory.map(t => ({
       id: t.id,
       name: 'Transfer',
-      desc: format(new Date(t.timestamp), 'MMM d, h:mm a'),
+      desc: `${format(new Date(t.timestamp), 'MMM d, h:mm a')}${t.account_type === 'VAULT' ? ' • Vault' : ''}`,
       amount: -t.amount, 
       icon: ArrowUpRight,
       color: 'text-indigo-400',
@@ -154,6 +156,15 @@ function HomeDashboard({ onSendClick }: { onSendClick: () => void }) {
           <p className="text-sm font-medium text-slate-400">
             {currentDate}
           </p>
+          <div className="flex flex-wrap items-center gap-2 mt-2">
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-200">
+              <ShieldCheck className="w-3.5 h-3.5" /> Shield Status: Active
+            </span>
+            <span className={`flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1 rounded-full border ${isOffline ? 'bg-amber-500/10 border-amber-500/30 text-amber-200' : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-200'}`}>
+              {isOffline ? <WifiOff className="w-3.5 h-3.5" /> : <Wifi className="w-3.5 h-3.5" />}
+              {isOffline ? 'Edge Safe Mode' : 'Real-time Online'}
+            </span>
+          </div>
         </div>
         <motion.div 
           whileTap={{ scale: 0.9 }}
@@ -242,6 +253,68 @@ function HomeDashboard({ onSendClick }: { onSendClick: () => void }) {
                 />
               </div>
             ))}
+          </div>
+
+          {/* Main vs Vault balances */}
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="rounded-xl bg-white/5 border border-white/10 p-4 flex justify-between items-center">
+              <div>
+                <p className="text-xs uppercase text-slate-400 font-bold">Main Wallet</p>
+                <p className="text-2xl font-black text-white">${walletBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <p className="text-[11px] text-slate-400 font-semibold mt-1">Daily spend for rides & meals</p>
+              </div>
+              <button
+                onClick={() => moveToVault(vaultAmount)}
+                className="px-3 py-2 rounded-lg bg-emerald-500/20 text-emerald-200 text-xs font-bold border border-emerald-400/30 hover:bg-emerald-500/30 transition-colors"
+              >
+                Move to Vault
+              </button>
+            </div>
+            <div className={`rounded-xl p-4 flex justify-between items-center border ${vaultLocked ? 'bg-red-500/10 border-red-400/30' : 'bg-indigo-500/10 border-indigo-400/30'}`}>
+              <div>
+                <p className="text-xs uppercase text-slate-300 font-bold flex items-center gap-1">
+                  Daily Wage Vault
+                  {vaultLocked ? <LockKeyhole className="w-4 h-4 text-red-300" /> : <Unlock className="w-4 h-4 text-emerald-200" />}
+                </p>
+                <p className="text-2xl font-black text-white">${vaultBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <p className="text-[11px] text-slate-200 font-semibold mt-1">
+                  {vaultLocked ? 'Locked automatically after a risky attempt.' : 'Rent & savings protected with stricter AI thresholds.'}
+                </p>
+              </div>
+              <button
+                onClick={() => releaseFromVault(vaultAmount)}
+                disabled={vaultLocked}
+                className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${vaultLocked ? 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'}`}
+              >
+                Daily Cash-Out
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-[11px] text-slate-300 font-semibold">Quick amount</span>
+            {[50, 100, 200].map((amt) => (
+              <button
+                key={amt}
+                onClick={() => setVaultAmount(amt)}
+                className={`px-3 py-1 rounded-full text-xs font-bold border transition-colors ${
+                  vaultAmount === amt ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-200' : 'bg-white/5 border-white/10 text-slate-200 hover:border-white/20'
+                }`}
+              >
+                ${amt}
+              </button>
+            ))}
+            <input
+              type="number"
+              min="1"
+              value={vaultAmount}
+              onChange={(e) => {
+                const parsed = Number(e.target.value);
+                setVaultAmount(Number.isNaN(parsed) ? 0 : parsed);
+              }}
+              className="h-9 w-20 bg-white/5 border border-white/10 rounded-lg text-center text-sm text-white"
+            />
+            <span className="text-[11px] text-slate-400 font-medium">Used for move/withdraw buttons above</span>
           </div>
         </div>
       </motion.div>
@@ -335,6 +408,28 @@ function HomeDashboard({ onSendClick }: { onSendClick: () => void }) {
         </div>
       </motion.div>
 
+      {/* Trust & literacy nudges */}
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-4 shadow-inner">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Shield Coach</p>
+            <p className="text-sm text-white font-semibold mt-1">
+              {latestDecision ? `Last action: ${latestDecision}` : 'Learning your pattern to keep wages safe.'}
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
+            <ShieldCheck className="w-5 h-5 text-emerald-200" />
+          </div>
+        </div>
+        <p className="text-xs text-slate-300 mt-3">
+          {latestExplanation || 'We show simple reasons when we block or flag: e.g., “New device” or “Unusual late-night amount”.'}
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] font-semibold">
+          <span className="px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-100">Shield Status: Active</span>
+          <span className="px-3 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-100">Explainable AI for every flag</span>
+        </div>
+      </div>
+
       {/* 5. TRANSACTIONS - Enhanced styling */}
       <div className="pb-6">
         <div className="flex justify-between items-center mb-4">
@@ -404,47 +499,132 @@ export default function WalletPage() {
   const [isSendModalOpen, setIsSendModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('home');
+  const [isOffline, setIsOffline] = useState(false);
+  const addToDashboardFeed = useTransactionStore((state) => state.addTransaction);
   
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 2000);
     return () => clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setIsOffline(!window.navigator.onLine);
+    const goOnline = () => setIsOffline(false);
+    const goOffline = () => setIsOffline(true);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
+
   const { 
-    latestRiskScore, latestDecision, latestExplanation, 
+    latestRiskScore, latestDecision, latestExplanation, latestUserMessage, latestVerification, latestChannel, latestConfidence, latestAgentReport, edgeFallbackUsed,
     setTransactionResult, clearTransactionResult,
-    deductBalance, addWalletTransaction 
+    deductBalance, deductVault, addWalletTransaction,
+    walletBalance, vaultBalance, lockVault, unlockVault
   } = useWalletStore();
 
-  const handleSendTransaction = async (data: { user_id: string; amount: number; location: string; device_id: string; recipient: string }) => {
+  const handleSendTransaction = async (data: { user_id: string; amount: number; location: string; device_id: string; recipient: string; account_type: 'MAIN' | 'VAULT' }) => {
     setLoading(true);
     try {
-      const payload = {
+      const nowIso = new Date().toISOString();
+      const sourceBalance = data.account_type === 'VAULT' ? vaultBalance : walletBalance;
+
+      if (data.amount > sourceBalance) {
+        alert('Not enough balance in the selected account.');
+        return;
+      }
+
+      const oldbalance = sourceBalance;
+      const newbalance = sourceBalance - data.amount;
+      const payload: any = {
         user_id: data.user_id,
         amount: data.amount,
         location: data.location,
         device_id: data.device_id,
-        timestamp: new Date().toISOString()
+        recipient: data.recipient,
+        transaction_type: data.account_type === 'VAULT' ? 'VAULT_WITHDRAWAL' : 'TRANSFER',
+        account_type: data.account_type,
+        currency: 'USD',
+        timestamp: nowIso,
+        oldbalance,
+        newbalance
       };
 
-      const res = await axios.post('/api/risk-score', payload);
-      const result = res.data;
+      // Pre-transaction phishing shield: simple local detector (simulate SMS/WhatsApp scan)
+      const suspectedPhish = (() => {
+        if (typeof window === 'undefined') return false;
+        const recent = window.localStorage.getItem('recent_msg_text') || 'Your parcel is stuck, pay RM5 to unlock.';
+        return /parcel.*unlock|click.*link|verify.*account|bonus.*claim/i.test(recent);
+      })();
 
-      setTransactionResult(result.risk_score, result.decision, result.reason);
+      if (suspectedPhish) {
+        payload['phishing_flag'] = true;
+        payload['phishing_text'] = 'Recent suspicious message (parcel unlock) clicked.';
+      }
+
+      const res = await axios.post('/api/risk-score', payload);
+      const result = res.data as {
+        risk_score: number;
+        decision: 'APPROVE' | 'FLAG' | 'BLOCK';
+        reason?: string;
+        confidence?: number;
+        user_message?: string;
+        verification?: { method: 'biometric' | 'whatsapp_otp' | 'none' };
+        channel?: 'MAIN' | 'VAULT';
+        edge_fallback_used?: boolean;
+        vault_locked?: boolean;
+        agent_report?: string;
+      };
+
+      setTransactionResult({
+        score: result.risk_score,
+        decision: result.decision,
+        explanation: result.reason,
+        userMessage: result.user_message,
+        verification: result.verification?.method,
+        channel: result.channel || data.account_type,
+        confidence: result.confidence,
+        agentReport: result.agent_report,
+        edgeFallbackUsed: result.edge_fallback_used
+      });
+      const txId = `WTX-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+      const newTx: Transaction = {
+        id: txId,
+        user_id: payload.user_id,
+        recipient: data.recipient,
+        amount: data.amount, 
+        location: payload.location,
+        device_id: payload.device_id,
+        timestamp: payload.timestamp,
+        risk_score: result.risk_score,
+        decision: result.decision,
+        reason: result.reason,
+        confidence: result.confidence,
+        account_type: data.account_type
+      };
       
       if (result.decision === 'APPROVE') {
-        deductBalance(data.amount);
-        addWalletTransaction({
-          id: `WTX-${Math.random().toString(36).substring(2, 9).toUpperCase()}`,
-          user_id: payload.user_id,
-          amount: data.amount, 
-          location: payload.location,
-          device_id: payload.device_id,
-          timestamp: payload.timestamp,
-          risk_score: result.risk_score,
-          decision: result.decision,
-        });
+        // Only post and record transfers that are approved.
+        if (data.account_type === 'VAULT') {
+          deductVault(data.amount);
+        } else {
+          deductBalance(data.amount);
+        }
+        addWalletTransaction(newTx);
+        // Auto-unlock vault after successful biometric/OTP approval
+        if (data.account_type === 'VAULT') {
+          unlockVault();
+        }
+      } else if (data.account_type === 'VAULT' || result.vault_locked) {
+        // If fraudster compromised account, lock vault first.
+        lockVault();
       }
+
+      addToDashboardFeed(newTx);
       
       setIsSendModalOpen(false);
     } catch (error) {
@@ -483,7 +663,7 @@ export default function WalletPage() {
         {/* Content Scrollable Area - Adjusted padding */}
         <div className="flex-1 overflow-y-auto px-5 pt-20 sm:pt-12 pb-40 scrollbar-hide relative z-10">
           <AnimatePresence mode="wait">
-            {activeTab === 'home' && <HomeDashboard key="home" onSendClick={() => setIsSendModalOpen(true)} />}
+            {activeTab === 'home' && <HomeDashboard key="home" onSendClick={() => setIsSendModalOpen(true)} isOffline={isOffline} />}
             {activeTab === 'analytics' && <AnalyticsView key="analytics" />}
             {activeTab === 'cards' && <CardsView key="cards" />}
             {activeTab === 'profile' && <ProfileView key="profile" />}
@@ -509,6 +689,12 @@ export default function WalletPage() {
           decision={latestDecision}
           score={latestRiskScore}
           explanation={latestExplanation}
+          userMessage={latestUserMessage}
+          verification={latestVerification}
+          channel={latestChannel}
+          confidence={latestConfidence}
+          edgeFallbackUsed={edgeFallbackUsed}
+          agentReport={latestAgentReport}
           onClose={clearTransactionResult}
         />
 
