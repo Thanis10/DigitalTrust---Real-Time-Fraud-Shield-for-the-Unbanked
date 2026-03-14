@@ -87,6 +87,17 @@ export const useTransactionStore = create<TransactionStore>((set) => ({
 
 interface WalletStore {
   walletBalance: number;
+  vaultBalance: number;
+  shieldStatus: 'active' | 'alert';
+  locationCurrency: {
+    code: string;
+    symbol: string;
+    name: string;
+  };
+  userLanguage: string;
+  supportedLanguages: { code: string; name: string; flag: string }[];
+  fraudProtectionActive: boolean;
+  isUserVerified: boolean;
   transactionHistory: Transaction[];
   latestRiskScore: number | null;
   latestDecision: 'APPROVE' | 'FLAG' | 'BLOCK' | null;
@@ -95,10 +106,30 @@ interface WalletStore {
   deductBalance: (amount: number) => void;
   setTransactionResult: (score: number, decision: 'APPROVE' | 'FLAG' | 'BLOCK', explanation?: string) => void;
   clearTransactionResult: () => void;
+  moveMoneyToVault: (amount: number) => void;
+  moveMoneyToMain: (amount: number) => void;
+  setShieldStatus: (status: 'active' | 'alert') => void;
+  setLocationInfo: (currency: { code: string; symbol: string; name: string }, lang: string) => void;
+  setUserLanguage: (lang: string) => void;
+  setVerified: (verified: boolean) => void;
+  setFraudProtection: (active: boolean) => void;
 }
 
 export const useWalletStore = create<WalletStore>((set) => ({
   walletBalance: 18475.00,
+  vaultBalance: 5800.00,
+  shieldStatus: 'active',
+  locationCurrency: { code: 'PHP', symbol: '₱', name: 'Philippines' },
+  userLanguage: 'en-PH',
+  supportedLanguages: [
+    { code: 'en-PH', name: 'English', flag: '🇺🇸' },
+    { code: 'th-TH', name: 'ไทย', flag: '🇹🇭' },
+    { code: 'ms-MY', name: 'Melayu', flag: '🇲🇾' },
+    { code: 'id-ID', name: 'Indonesia', flag: '🇮🇩' },
+    { code: 'tl-PH', name: 'Tagalog', flag: '🇵🇭' },
+  ],
+  fraudProtectionActive: true,
+  isUserVerified: false,
   transactionHistory: INITIAL_TRANSACTIONS.filter(t => t.user_id === 'USR-8821' && t.decision === 'APPROVE'),
   latestRiskScore: null,
   latestDecision: null,
@@ -110,7 +141,22 @@ export const useWalletStore = create<WalletStore>((set) => ({
   setTransactionResult: (score, decision, explanation) =>
     set({ latestRiskScore: score, latestDecision: decision, latestExplanation: explanation || null }),    
   clearTransactionResult: () =>
-    set({ latestRiskScore: null, latestDecision: null, latestExplanation: null })
+    set({ latestRiskScore: null, latestDecision: null, latestExplanation: null }),
+  moveMoneyToVault: (amount) =>
+    set((state) => ({ 
+      walletBalance: state.walletBalance - amount,
+      vaultBalance: state.vaultBalance + amount 
+    })),
+  moveMoneyToMain: (amount) =>
+    set((state) => ({ 
+      walletBalance: state.walletBalance + amount,
+      vaultBalance: state.vaultBalance - amount 
+    })),
+  setShieldStatus: (status) => set({ shieldStatus: status }),
+  setLocationInfo: (currency, lang) => set({ locationCurrency: currency, userLanguage: lang }),
+  setUserLanguage: (lang) => set({ userLanguage: lang }),
+  setVerified: (verified) => set({ isUserVerified: verified }),
+  setFraudProtection: (active) => set({ fraudProtectionActive: active }),
 }));
 
 interface RiskStore {
