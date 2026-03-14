@@ -4,7 +4,7 @@ import axios from 'axios';
 import { useWalletStore, Transaction, useTransactionStore } from '@/store';
 import Link from 'next/link';
 import { 
-  ChevronLeft, ArrowUpRight, ArrowDownLeft, ShoppingBag, Lock, Wifi, WifiOff
+  ChevronLeft, ArrowUpRight, ArrowDownLeft, ShoppingBag, Lock, Wifi, WifiOff, CreditCard, Wallet
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import Image from 'next/image';
@@ -48,16 +48,19 @@ function HomeDashboard({
   onTopUpClick, 
   onReceiveClick, 
   onVaultTransferClick,
+  onVerifyClick,
   isOffline
 }: { 
   onSendClick: () => void;
   onTopUpClick: () => void;
   onReceiveClick: () => void;
   onVaultTransferClick: (mode: 'deposit' | 'withdraw') => void;
+  onVerifyClick: () => void;
   isOffline: boolean;
 }) {
-  const { transactionHistory, locationCurrency, latestDecision, latestExplanation, isUserVerified } = useWalletStore();
+  const { transactionHistory, locationCurrency, latestDecision, latestExplanation, isUserVerified, t } = useWalletStore();
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const [activeCard, setActiveCard] = useState<'main' | 'vault'>('main');
 
   const allTxns = [
     ...transactionHistory.map(t => ({
@@ -74,49 +77,69 @@ function HomeDashboard({
     ...STATIC_MOCK_TXNS.map(t => ({
       ...t,
       originalTx: {
-        id: t.id,
-        user_id: 'me',
-        amount: t.amount,
-        location: 'Local',
-        device_id: 'Current Device',
-        timestamp: new Date().toISOString(),
-        risk_score: 0,
-        decision: 'APPROVE' as const,
-        reason: t.name
+        id: t.id, user_id: 'me', amount: t.amount, location: 'Local', device_id: 'Current Device',
+        timestamp: new Date().toISOString(), risk_score: 0, decision: 'APPROVE' as const, reason: t.name
       }
     }))
   ].slice(0, 4);
 
   return (
     <motion.div 
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="space-y-8"
     >
-      <div className="space-y-2">
-        <WalletHeader />
-        <div className="flex items-center gap-2">
-          <span className={`flex items-center gap-1.5 text-[10px] font-black px-3 py-1 rounded-full border uppercase tracking-widest ${isOffline ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400'}`}>
-            {isOffline ? <WifiOff className="w-3 h-3" /> : <Wifi className="w-3 h-3" />}
-            {isOffline ? 'Edge Safe Mode' : 'Real-time Online'}
-          </span>
-        </div>
-      </div>
+      <WalletHeader isOffline={isOffline} />
       
-      <div className="space-y-4">
-        <MainWalletCard />
-        <SecureVaultCard onMoveMoney={onVaultTransferClick} />
+      <div className="relative h-[330px] w-full mt-10 mb-4">
+        {/* Secure Vault Card Slot */}
+        <motion.div 
+          animate={{ 
+            y: activeCard === 'vault' ? 30 : 0,
+            scale: activeCard === 'vault' ? 1 : 0.96,
+            zIndex: activeCard === 'vault' ? 30 : 10,
+            opacity: activeCard === 'vault' ? 1 : 0.85
+          }}
+          transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+          onClick={() => setActiveCard('vault')}
+          className="absolute inset-0 cursor-pointer"
+        >
+          <div className={`absolute -top-7 right-8 px-4 py-1.5 rounded-t-xl border-t border-x border-indigo-500/30 bg-slate-900 flex items-center gap-2 transition-all ${activeCard === 'vault' ? 'opacity-0' : 'opacity-100 shadow-[0_-5px_15px_rgba(99,102,241,0.2)]'}`}>
+             <Lock className="w-2.5 h-2.5 text-indigo-400" />
+             <span className="text-[8px] font-black text-white uppercase tracking-[0.2em]">{t('secure_vault')}</span>
+          </div>
+          <SecureVaultCard onMoveMoney={onVaultTransferClick} onVerifyClick={onVerifyClick} />
+        </motion.div>
+
+        {/* Main Wallet Card Slot */}
+        <motion.div 
+          animate={{ 
+            y: activeCard === 'main' ? 30 : 0,
+            scale: activeCard === 'main' ? 1 : 0.96,
+            zIndex: activeCard === 'main' ? 30 : 10,
+            opacity: activeCard === 'main' ? 1 : 0.85
+          }}
+          transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+          onClick={() => setActiveCard('main')}
+          className="absolute inset-0 cursor-pointer"
+        >
+          <div className={`absolute -top-7 left-8 px-4 py-1.5 rounded-t-xl border-t border-x border-purple-500/30 bg-slate-900 flex items-center gap-2 transition-all ${activeCard === 'main' ? 'opacity-0' : 'opacity-100 shadow-[0_-5px_15px_rgba(168,85,247,0.2)]'}`}>
+             <Wallet className="w-2.5 h-2.5 text-purple-400" />
+             <span className="text-[8px] font-black text-white uppercase tracking-[0.2em]">{t('main_wallet')}</span>
+          </div>
+          <MainWalletCard />
+        </motion.div>
       </div>
 
-      <TrustShieldIndicator />
+      <div className="space-y-8 relative z-40 bg-slate-950 pt-2">
+        <QuickActionButtons 
+          onSendClick={onSendClick}
+          onTopUpClick={onTopUpClick}
+          onReceiveClick={onReceiveClick}
+          onMoveToVaultClick={() => onVaultTransferClick('deposit')}
+        />
 
-      <QuickActionButtons 
-        onSendClick={onSendClick}
-        onTopUpClick={onTopUpClick}
-        onReceiveClick={onReceiveClick}
-        onMoveToVaultClick={() => onVaultTransferClick('deposit')}
-      />
+        <TrustShieldIndicator />
+      </div>
 
       <VoiceTransactionInput />
 
@@ -128,17 +151,15 @@ function HomeDashboard({
 
       <div className="pb-6">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-black text-white">Recent Activity</h3>
-          <button className="text-xs font-bold text-indigo-400 uppercase tracking-widest">See All</button>
+          <h3 className="text-lg font-black text-white">{t('recent_activity')}</h3>
+          <button className="text-xs font-bold text-indigo-400 uppercase tracking-widest">{t('see_all')}</button>
         </div>
         
         <div className="space-y-3">
           {allTxns.map((tx, i) => (
             <motion.div 
               key={tx.id}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.05 }}
+              initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
               onClick={() => setSelectedTx(tx.originalTx)}
               className="flex items-center justify-between p-4 rounded-[1.5rem] bg-white/5 border border-white/5 hover:border-indigo-500/30 transition-all cursor-pointer"
             >
@@ -208,9 +229,10 @@ export default function WalletPage() {
 
   const { 
     latestDecision, latestRiskScore, latestExplanation, 
+    latestUserMessage, latestVerification, latestChannel, latestConfidence, latestAgentReport, edgeFallbackUsed,
     setTransactionResult, clearTransactionResult,
     deductBalance, deductVault, addWalletTransaction, setShieldStatus, 
-    isUserVerified, setVerified, walletBalance, vaultBalance, lockVault, unlockVault
+    isUserVerified, setVerified, walletBalance, vaultBalance, lockVault, unlockVault, locationCurrency, t
   } = useWalletStore();
 
   const processTransaction = async (data: any) => {
@@ -233,13 +255,12 @@ export default function WalletPage() {
         recipient: data.recipient,
         transaction_type: data.account_type === 'VAULT' ? 'VAULT_WITHDRAWAL' : 'TRANSFER',
         account_type: data.account_type,
-        currency: 'USD',
+        currency: locationCurrency.code,
         timestamp: nowIso,
         oldbalance: sourceBalance,
         newbalance: sourceBalance - data.amount
       };
 
-      // Phishing detection logic
       const suspectedPhish = (() => {
         if (typeof window === 'undefined') return false;
         const recent = window.localStorage.getItem('recent_msg_text') || 'Your parcel is stuck, pay RM5 to unlock.';
@@ -268,18 +289,11 @@ export default function WalletPage() {
       
       const txId = `WTX-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
       const newTx: Transaction = {
-        id: txId,
-        user_id: payload.user_id,
-        recipient: data.recipient,
-        amount: data.amount, 
-        location: payload.location,
-        device_id: payload.device_id,
-        timestamp: payload.timestamp,
-        risk_score: result.risk_score,
-        decision: result.decision,
+        id: txId, user_id: payload.user_id, recipient: data.recipient, amount: data.amount, 
+        location: payload.location, device_id: payload.device_id, timestamp: payload.timestamp,
+        risk_score: result.risk_score, decision: result.decision,
         reason: result.reason || data.reference || 'Transfer',
-        confidence: result.confidence,
-        account_type: data.account_type
+        confidence: result.confidence, account_type: data.account_type
       };
 
       if (result.decision === 'APPROVE') {
@@ -338,7 +352,6 @@ export default function WalletPage() {
   const handleSecurityVerify = () => {
     setVerified(true);
     setIsSecurityOpen(false);
-    
     if (pendingTransaction) {
       processTransaction(pendingTransaction);
     } else if (pendingVaultTransfer) {
@@ -360,29 +373,22 @@ export default function WalletPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#02000a] flex items-center justify-center p-0 sm:p-4 font-sans selection:bg-indigo-500/30 relative">
+    <div className="min-h-screen bg-[#02000a] flex items-center justify-center p(0 sm:p-4 font-sans selection:bg-indigo-500/30 relative">
       <LocationAwareWallet />
       
-      {/* Desktop Exit to Home */}
       <Link href="/" className="absolute top-8 left-8 hidden sm:flex items-center gap-2 text-slate-400 hover:text-white transition-colors group z-20 bg-white/5 px-4 py-2 rounded-full backdrop-blur-sm border border-white/10">
         <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-        <span className="text-sm font-medium">Exit Simulator</span>
+        <span className="text-sm font-medium">Exit</span>
       </Link>
 
-      {/* Mobile Frame Container */}
       <div className="w-full h-[100dvh] sm:h-[844px] max-w-[390px] relative bg-slate-950 sm:rounded-[3rem] sm:border-[8px] sm:border-slate-800 shadow-[0_0_100px_rgba(99,102,241,0.2)] overflow-hidden flex flex-col">
-        
-        {/* Mobile Exit to Home */}
         <Link href="/" className="sm:hidden absolute top-12 left-5 flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors z-50 bg-white/5 px-3 py-1.5 rounded-full backdrop-blur-sm">
           <ChevronLeft className="w-4 h-4" />
           <span className="text-xs font-medium">Exit</span>
         </Link>
-        
-        {/* Background Gradients */}
         <div className="absolute top-0 left-0 right-0 h-[500px] bg-gradient-to-b from-indigo-900/20 via-purple-900/10 to-transparent pointer-events-none z-0" />
         <div className="absolute top-0 right-0 w-80 h-80 bg-purple-600/10 rounded-full blur-[100px] pointer-events-none z-0 animate-pulse" />
         
-        {/* Content Scrollable Area */}
         <div className="flex-1 overflow-y-auto px-5 pt-24 sm:pt-12 pb-40 scrollbar-hide relative z-10">
           <AnimatePresence mode="wait">
             {activeTab === 'home' && (
@@ -392,6 +398,7 @@ export default function WalletPage() {
                 onTopUpClick={() => setIsTopUpOpen(true)}
                 onReceiveClick={() => setIsReceiveModalOpen(true)}
                 onVaultTransferClick={handleVaultTransferRequest}
+                onVerifyClick={() => setIsSecurityOpen(true)}
                 isOffline={isOffline}
               />
             )}
@@ -401,72 +408,30 @@ export default function WalletPage() {
           </AnimatePresence>
         </div>
 
-        {/* Floating Bottom Nav */}
-        <BottomNavigation 
-          activeTab={activeTab}
-          onTabChange={handleTabChange}
-          onAddClick={() => setIsSendModalOpen(true)} 
-        />
+        <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} onAddClick={() => setIsSendModalOpen(true)} />
 
-        {/* Modals */}
-        <SendMoneyModal 
-          isOpen={isSendModalOpen} 
-          onClose={() => setIsSendModalOpen(false)} 
-          onSend={handleSendTransactionRequest}
-          loading={loading}
-        />
-
-        <TopUpModal 
-          isOpen={isTopUpOpen} 
-          onClose={() => setIsTopUpOpen(false)} 
-        />
-
-        <ReceiveMoneyModal 
-          isOpen={isReceiveModalOpen}
-          onClose={() => setIsReceiveModalOpen(false)}
-        />
-
-        <VaultTransferModal 
-          isOpen={isVaultModalOpen}
-          onClose={() => setIsVaultModalOpen(false)}
-          mode={vaultMode}
-        />
-
-        <FriendlyFraudAlertModal 
-          isOpen={isFraudAlertOpen}
-          onClose={() => setIsFraudAlertOpen(false)}
-          onVerify={handleVerify}
-        />
-
-        <SecurityVerificationModal 
-          isOpen={isSecurityOpen}
-          onClose={() => { setIsSecurityOpen(false); setPendingTab(null); setPendingTransaction(null); setPendingVaultTransfer(false); }}
-          onVerify={handleSecurityVerify}
-        />
-
+        <SendMoneyModal isOpen={isSendModalOpen} onClose={() => setIsSendModalOpen(false)} onSend={handleSendTransactionRequest} loading={loading} />
+        <TopUpModal isOpen={isTopUpOpen} onClose={() => setIsTopUpOpen(false)} />
+        <ReceiveMoneyModal isOpen={isReceiveModalOpen} onClose={() => setIsReceiveModalOpen(false)} />
+        <VaultTransferModal isOpen={isVaultModalOpen} onClose={() => setIsVaultModalOpen(false)} mode={vaultMode} />
+        <FriendlyFraudAlertModal isOpen={isFraudAlertOpen} onClose={() => setIsFraudAlertOpen(false)} onVerify={handleVerify} />
+        <SecurityVerificationModal isOpen={isSecurityOpen} onClose={() => { setIsSecurityOpen(false); setPendingTab(null); setPendingTransaction(null); setPendingVaultTransfer(false); }} onVerify={handleSecurityVerify} />
         {showResultModal && (
           <FriendlyRiskResultModal 
-            decision={latestDecision}
-            score={latestRiskScore}
-            explanation={latestExplanation}
+            decision={latestDecision} score={latestRiskScore} explanation={latestExplanation} userMessage={latestUserMessage}
+            verification={latestVerification} channel={latestChannel} confidence={latestConfidence}
+            edgeFallbackUsed={edgeFallbackUsed} agentReport={latestAgentReport}
             onClose={() => { setShowResultModal(false); clearTransactionResult(); }}
           />
         )}
 
-        {/* Splash Screen */}
         <AnimatePresence>
           {showSplash && (
             <motion.div 
-              initial={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.5 }}
+              initial={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.5 }}
               className="absolute inset-0 z-[100] bg-slate-950 flex flex-col items-center justify-center"
             >
-              <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="flex flex-col items-center relative z-10"
-              >
+              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex flex-col items-center relative z-10">
                 <div className="w-24 h-24 rounded-[2rem] bg-gradient-to-br from-indigo-500 to-purple-600 p-[1px] shadow-[0_0_60px_rgba(99,102,241,0.4)] mb-6">
                   <div className="w-full h-full bg-slate-900 rounded-[2rem] flex items-center justify-center p-5">
                     <Image src="/logo.png" alt="Logo" width={48} height={48} />

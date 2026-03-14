@@ -39,8 +39,10 @@ export default function SendMoneyModal({ isOpen, onClose, onSend, loading }: Pro
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [listening, setListening] = useState(false);
   const [voiceHint, setVoiceHint] = useState<string | null>(null);
+  const [voiceLang, setVoiceLang] = useState<string>('en');
+  const [nlpPayload, setNlpPayload] = useState<{ amount?: number; recipient?: string } | null>(null);
   
-  const { locationCurrency } = useWalletStore();
+  const { locationCurrency, t } = useWalletStore();
 
   const malayNumberToFloat = (text: string): number | null => {
     const words = text.toLowerCase().split(/\s+/);
@@ -91,21 +93,30 @@ export default function SendMoneyModal({ isOpen, onClose, onSend, loading }: Pro
     if (!Number.isNaN(amountVal) && amountVal > 0) setAmount(String(amountVal));
     if (receiver) setRecipient(receiver);
     
-    setVoiceHint(`Heard: "${transcript.trim()}"`);
+    const detectedLang = /ringgit|kat|tolong|hantar|puluh|ratus/.test(text) ? 'ms' : 'en';
+    setVoiceLang(detectedLang);
+
+    const payload = {
+      amount: !Number.isNaN(amountVal) ? amountVal : undefined,
+      recipient: receiver || undefined
+    };
+    setNlpPayload(payload.amount || payload.recipient ? payload : null);
+
+    setVoiceHint(`Heard (${detectedLang === 'ms' ? 'Malay/BI' : 'English'}): "${transcript.trim()}"`);
   };
 
   const handleVoice = () => {
     if (typeof window === 'undefined') return;
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitRecognition;
+    const recognitionObj = SpeechRecognition ? new SpeechRecognition() : null;
+    if (!recognitionObj) {
       setVoiceHint('Voice not supported');
       return;
     }
-    const recognition = new SpeechRecognition();
-    recognition.onstart = () => setListening(true);
-    recognition.onend = () => setListening(false);
-    recognition.onresult = (event: any) => parseVoiceCommand(event.results[0][0].transcript);
-    recognition.start();
+    recognitionObj.onstart = () => setListening(true);
+    recognitionObj.onend = () => setListening(false);
+    recognitionObj.onresult = (event: any) => parseVoiceCommand(event.results[0][0].transcript);
+    recognitionObj.start();
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -142,7 +153,7 @@ export default function SendMoneyModal({ isOpen, onClose, onSend, loading }: Pro
           >
             {/* Header */}
             <div className="flex justify-between items-center px-6 pt-12 pb-6 relative z-10">
-              <h2 className="text-2xl font-black text-white uppercase tracking-tight">Send Money</h2>
+              <h2 className="text-2xl font-black text-white uppercase tracking-tight">{t('send')}</h2>
               <button 
                 type="button"
                 onClick={onClose}
@@ -160,8 +171,8 @@ export default function SendMoneyModal({ isOpen, onClose, onSend, loading }: Pro
                 {/* Account Type Toggle */}
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { label: 'Main Wallet', value: 'MAIN' as const, icon: User },
-                    { label: 'Secure Vault', value: 'VAULT' as const, icon: Lock },
+                    { label: t('main_wallet'), value: 'MAIN' as const, icon: User },
+                    { label: t('secure_vault'), value: 'VAULT' as const, icon: Lock },
                   ].map((item) => (
                     <button
                       key={item.value}
@@ -236,6 +247,25 @@ export default function SendMoneyModal({ isOpen, onClose, onSend, loading }: Pro
                   </div>
                 </div>
 
+                {/* NLP Payload Preview (Teammate Feature) */}
+                {nlpPayload && (
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-xs text-slate-200 space-y-2">
+                    <div className="flex items-center gap-2 font-bold text-white uppercase tracking-widest text-[10px]">
+                      <Mic className="w-3 h-3" /> NLP Payload Preview
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 ml-auto">
+                        {voiceLang === 'ms' ? 'Malay/BI' : 'English'}
+                      </span>
+                    </div>
+                    <pre className="bg-black/30 rounded-lg p-3 border border-white/5 text-[11px] overflow-x-auto text-indigo-200 font-mono">
+{`{
+  "amount": ${nlpPayload.amount ?? 'null'},
+  "receiver": "${nlpPayload.recipient ?? ''}"
+}`}
+                    </pre>
+                    <p className="text-[10px] text-slate-400">Tap send to route this JSON through the FastAPI fraud shield.</p>
+                  </div>
+                )}
+
                 {/* Reference Input */}
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Reference</label>
@@ -257,7 +287,7 @@ export default function SendMoneyModal({ isOpen, onClose, onSend, loading }: Pro
                     disabled={loading}
                     className="w-full h-20 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-black text-xl rounded-[2rem] shadow-[0_10px_40px_rgba(99,102,241,0.4)] transition-all active:scale-95"
                   >
-                    {loading ? "Evaluating..." : "Confirm & Verify"}
+                    {loading ? "Evaluating..." : `${t('send')} & Verify`}
                   </Button>
                 </div>
               </form>

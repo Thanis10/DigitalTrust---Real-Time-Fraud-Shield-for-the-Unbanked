@@ -1,6 +1,7 @@
 "use client";
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldAlert, Fingerprint, Camera, MessageSquare, X } from 'lucide-react';
+import { useWalletStore } from '@/store';
 
 interface FriendlyFraudAlertModalProps {
   isOpen: boolean;
@@ -9,14 +10,14 @@ interface FriendlyFraudAlertModalProps {
 }
 
 export default function FriendlyFraudAlertModal({ isOpen, onClose, onVerify }: FriendlyFraudAlertModalProps) {
+  const { t } = useWalletStore();
+
   return (
     <AnimatePresence>
       {isOpen && (
         <div className="absolute inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
           <motion.div
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+            initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }}
             className="w-full max-w-md bg-gradient-to-b from-slate-900 to-slate-950 border border-amber-500/30 rounded-[2.5rem] overflow-hidden shadow-[0_0_50px_rgba(245,158,11,0.2)]"
           >
             <div className="p-8 text-center space-y-6">
@@ -32,8 +33,7 @@ export default function FriendlyFraudAlertModal({ isOpen, onClose, onVerify }: F
               <div className="space-y-3">
                 <h2 className="text-3xl font-black text-white leading-tight">Hold on! 🛡</h2>
                 <p className="text-slate-400 font-medium">
-                  This transfer looks a little unusual for you. 
-                  To keep your earnings safe, please confirm it's really you.
+                  {t('ms-MY') ? 'Pemindahan ini kelihatan agak luar biasa untuk anda. Sila sahkan identiti anda.' : 'This transfer looks a little unusual for you. To keep your earnings safe, please confirm it\'s really you.'}
                 </p>
               </div>
 
@@ -59,7 +59,7 @@ export default function FriendlyFraudAlertModal({ isOpen, onClose, onVerify }: F
 
               <button 
                 onClick={onClose}
-                className="text-sm font-bold text-slate-500 hover:text-slate-300 transition-colors"
+                className="text-sm font-bold text-slate-500 hover:text-slate-300 transition-colors uppercase tracking-widest"
               >
                 Cancel Transaction
               </button>

@@ -5,7 +5,7 @@ import { Eye, EyeOff, TrendingUp, Wallet, ArrowUpRight } from 'lucide-react';
 import { useWalletStore } from '@/store';
 
 export default function MainWalletCard() {
-  const { walletBalance, locationCurrency } = useWalletStore();
+  const { walletBalance, locationCurrency, t } = useWalletStore();
   const [displayBalance, setDisplayBalance] = useState(0);
   const [isBalanceHidden, setIsBalanceHidden] = useState(false);
 
@@ -33,7 +33,6 @@ export default function MainWalletCard() {
       <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 opacity-50 blur-[2px]" />
       
       <div className="relative w-full bg-slate-950 backdrop-blur-2xl rounded-[2.5rem] p-8 overflow-hidden z-10">
-        {/* Animated background orbs */}
         <div className="absolute -top-24 -right-24 w-64 h-64 bg-purple-500/20 rounded-full blur-[60px] pointer-events-none animate-pulse" />
         <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-indigo-500/20 rounded-full blur-[60px] pointer-events-none animate-pulse delay-1000" />
         
@@ -44,7 +43,7 @@ export default function MainWalletCard() {
                 <Wallet className="w-4 h-4 text-indigo-400" />
               </div>
               <p className="text-sm font-bold text-indigo-200 tracking-wide">
-                Main Wallet
+                {t('main_wallet')}
               </p>
               <button 
                 onClick={() => setIsBalanceHidden(!isBalanceHidden)}
@@ -60,26 +59,20 @@ export default function MainWalletCard() {
                 {isBalanceHidden ? (
                   <motion.span 
                     key="hidden"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
+                    initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
                     className="tracking-widest text-4xl"
-                  >
-                    ••••••
-                  </motion.span>
+                  >••••••</motion.span>
                 ) : (
                   <motion.span 
                     key="visible"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
+                    initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
                   >
                     {displayBalance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                   </motion.span>
                 )}
               </AnimatePresence>
             </h2>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Daily Spending Money</p>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t('daily_spend')}</p>
           </div>
           
           <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-3 backdrop-blur-sm flex flex-col items-center">
@@ -90,7 +83,7 @@ export default function MainWalletCard() {
 
         <div className="relative z-10 flex gap-3">
            <div className="flex-1 bg-white/5 rounded-2xl p-4 border border-white/10">
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Today's Income</p>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">{t('earnings')}</p>
               <p className="text-lg font-black text-white">{locationCurrency.symbol}1,250</p>
            </div>
            <div className="flex-1 bg-white/5 rounded-2xl p-4 border border-white/10">

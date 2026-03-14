@@ -1,6 +1,7 @@
 "use client";
 import { motion } from 'framer-motion';
 import { Send, Download, Plus, ArrowRightLeft } from 'lucide-react';
+import { useWalletStore } from '@/store';
 
 interface QuickActionButtonsProps {
   onSendClick: () => void;
@@ -15,11 +16,13 @@ export default function QuickActionButtons({
   onReceiveClick, 
   onMoveToVaultClick 
 }: QuickActionButtonsProps) {
+  const { t } = useWalletStore();
+  
   const actions = [
-    { icon: Send, label: 'Send Money', onClick: onSendClick, color: 'bg-indigo-500', shadow: 'shadow-indigo-500/20' },
-    { icon: Download, label: 'Receive', onClick: onReceiveClick, color: 'bg-emerald-500', shadow: 'shadow-emerald-500/20' },
-    { icon: Plus, label: 'Top Up', onClick: onTopUpClick, color: 'bg-purple-500', shadow: 'shadow-purple-500/20' },
-    { icon: ArrowRightLeft, label: 'To Vault', onClick: onMoveToVaultClick, color: 'bg-amber-500', shadow: 'shadow-amber-500/20' },
+    { icon: Send, label: t('send'), onClick: onSendClick, color: 'bg-indigo-500', shadow: 'shadow-indigo-500/20' },
+    { icon: Download, label: t('receive'), onClick: onReceiveClick, color: 'bg-emerald-500', shadow: 'shadow-emerald-500/20' },
+    { icon: Plus, label: t('topup'), onClick: onTopUpClick, color: 'bg-purple-500', shadow: 'shadow-purple-500/20' },
+    { icon: ArrowRightLeft, label: t('to_vault'), onClick: onMoveToVaultClick, color: 'bg-amber-500', shadow: 'shadow-amber-500/20' },
   ];
 
   return (

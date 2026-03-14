@@ -26,7 +26,7 @@ export default function LocationAwareWallet() {
   useEffect(() => {
     // In a real app, we would use geolocation or IP-based detection
     // For this simulator, we'll default to Philippines or simulate a change
-    const defaultLocation = LOCATIONS[0];
+    const defaultLocation = LOCATIONS[2];
     setLocationInfo(defaultLocation.currency, defaultLocation.language);
   }, [setLocationInfo]);
 

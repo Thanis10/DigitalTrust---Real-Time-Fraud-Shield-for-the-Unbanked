@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { LucideIcon } from 'lucide-react';
 import { ArrowUpRight } from 'lucide-react';
+import { useWalletStore } from '@/store';
 
 interface Props {
   transaction: {
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export default function TransactionItem({ transaction, index, onClick }: Props) {
+  const { locationCurrency } = useWalletStore();
   const isPositive = transaction.amount > 0 && !transaction.isDynamic;
   const Icon: LucideIcon = transaction.icon || ArrowUpRight;
   
@@ -46,7 +48,7 @@ export default function TransactionItem({ transaction, index, onClick }: Props) 
       </div>
       <div className="text-right">
         <div className={`text-base font-black tracking-tight ${isPositive ? 'text-emerald-400' : 'text-white'}`}>
-          {isPositive ? '+' : ''}{transaction.amount < 0 ? '-' : ''}${Math.abs(transaction.amount).toFixed(2)}
+          {isPositive ? '+' : ''}{transaction.amount < 0 ? '-' : ''}{locationCurrency.symbol}{Math.abs(transaction.amount).toFixed(2)}
         </div>
         {transaction.isDynamic && transaction.originalTx?.decision && (
           <span className={`text-[8px] uppercase tracking-widest font-bold px-1.5 py-0.5 rounded mt-1 inline-block ${

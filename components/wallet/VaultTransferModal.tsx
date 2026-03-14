@@ -1,7 +1,7 @@
 "use client";
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ArrowDown, ArrowUp, Lock, ShieldCheck, Wallet, ArrowRightLeft } from 'lucide-react';
+import { X, Lock, Wallet, ArrowRightLeft, ShieldCheck } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useWalletStore } from '@/store';
@@ -13,7 +13,7 @@ interface VaultTransferModalProps {
 }
 
 export default function VaultTransferModal({ isOpen, onClose, mode: initialMode }: VaultTransferModalProps) {
-  const { walletBalance, vaultBalance, moveMoneyToVault, moveMoneyToMain, locationCurrency } = useWalletStore();
+  const { walletBalance, vaultBalance, moveToVault, releaseFromVault, locationCurrency, t } = useWalletStore();
   const [amount, setAmount] = useState('');
   const [mode, setMode] = useState<'deposit' | 'withdraw'>(initialMode);
 
@@ -24,10 +24,10 @@ export default function VaultTransferModal({ isOpen, onClose, mode: initialMode 
 
     if (mode === 'deposit') {
       if (val > walletBalance) return;
-      moveMoneyToVault(val);
+      moveToVault(val);
     } else {
       if (val > vaultBalance) return;
-      moveMoneyToMain(val);
+      releaseFromVault(val);
     }
     setAmount('');
     onClose();
@@ -56,16 +56,15 @@ export default function VaultTransferModal({ isOpen, onClose, mode: initialMode 
                   <Lock className="w-8 h-8 text-indigo-400" />
                 </div>
                 <h2 className="text-2xl font-black text-white uppercase tracking-tight">
-                  {mode === 'deposit' ? 'Move to Vault' : 'Withdraw to Main'}
+                  {mode === 'deposit' ? t('move_in') : t('withdraw')}
                 </h2>
                 <p className="text-sm text-slate-400 font-medium">Protect your earnings with AI</p>
               </div>
 
-              {/* Transfer Direction UI */}
               <div className="flex items-center justify-between gap-4 p-4 bg-white/5 rounded-[2rem] border border-white/5">
                 <div className={`flex-1 text-center p-3 rounded-2xl transition-all ${mode === 'deposit' ? 'bg-indigo-500/20 border border-indigo-500/30' : 'opacity-40'}`}>
                   <Wallet className="w-5 h-5 text-indigo-400 mx-auto mb-1" />
-                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Main</p>
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t('main_wallet')}</p>
                   <p className="text-xs font-bold text-white">{locationCurrency.symbol}{walletBalance.toLocaleString()}</p>
                 </div>
                 
@@ -75,12 +74,11 @@ export default function VaultTransferModal({ isOpen, onClose, mode: initialMode 
 
                 <div className={`flex-1 text-center p-3 rounded-2xl transition-all ${mode === 'withdraw' ? 'bg-indigo-500/20 border border-indigo-500/30' : 'opacity-40'}`}>
                   <Lock className="w-5 h-5 text-indigo-400 mx-auto mb-1" />
-                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Vault</p>
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t('secure_vault')}</p>
                   <p className="text-xs font-bold text-white">{locationCurrency.symbol}{vaultBalance.toLocaleString()}</p>
                 </div>
               </div>
 
-              {/* Amount Input */}
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Amount to Move</label>
@@ -120,9 +118,9 @@ export default function VaultTransferModal({ isOpen, onClose, mode: initialMode 
 
                 <Button 
                   type="submit"
-                  className="w-full h-16 bg-indigo-500 hover:bg-indigo-600 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-indigo-500/20 active:scale-95 transition-all"
+                  className="w-full h-16 bg-indigo-500 hover:bg-indigo-600 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl active:scale-95 transition-all"
                 >
-                  {mode === 'deposit' ? 'Confirm Secure Move' : 'Verify & Withdraw'}
+                  {mode === 'deposit' ? t('move_in') : t('withdraw')}
                 </Button>
               </form>
             </div>

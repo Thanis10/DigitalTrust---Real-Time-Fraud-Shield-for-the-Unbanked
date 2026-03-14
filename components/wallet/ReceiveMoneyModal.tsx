@@ -11,7 +11,7 @@ interface ReceiveMoneyModalProps {
 
 export default function ReceiveMoneyModal({ isOpen, onClose }: ReceiveMoneyModalProps) {
   const [copied, setCopied] = useState(false);
-  const { locationCurrency } = useWalletStore();
+  const { locationCurrency, t } = useWalletStore();
   const digitalTrustId = "DT-MARIA-9921";
 
   const handleCopy = () => {
@@ -38,21 +38,16 @@ export default function ReceiveMoneyModal({ isOpen, onClose }: ReceiveMoneyModal
 
             <div className="p-8 text-center space-y-8">
               <div className="space-y-2">
-                <h2 className="text-2xl font-black text-white uppercase tracking-tight">Receive Money</h2>
+                <h2 className="text-2xl font-black text-white uppercase tracking-tight">{t('receive')}</h2>
                 <p className="text-sm text-slate-400 font-medium">Show this QR code to the sender</p>
               </div>
 
-              {/* Mock QR Code Container */}
               <div className="relative mx-auto w-64 h-64 bg-white p-4 rounded-[2.5rem] shadow-[0_0_50px_rgba(99,102,241,0.3)] group">
                 <div className="w-full h-full border-4 border-slate-900 rounded-[1.5rem] flex items-center justify-center relative overflow-hidden">
                   <QrCode className="w-48 h-48 text-slate-900" />
-                  
-                  {/* Subtle AI Shield Overlay on QR */}
                   <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
                      <div className="w-32 h-32 border-[20px] border-indigo-500 rounded-full" />
                   </div>
-                  
-                  {/* Center Logo Placeholder */}
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center border-4 border-white">
                        <div className="w-4 h-4 bg-indigo-500 rounded-full animate-pulse" />
@@ -61,7 +56,6 @@ export default function ReceiveMoneyModal({ isOpen, onClose }: ReceiveMoneyModal
                 </div>
               </div>
 
-              {/* DigitalTrust ID Section */}
               <div className="space-y-4">
                 <div className="p-4 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-between group">
                   <div className="text-left">
@@ -88,7 +82,6 @@ export default function ReceiveMoneyModal({ isOpen, onClose }: ReceiveMoneyModal
                 </div>
               </div>
 
-              {/* Merchant / Gig Worker Tip */}
               <div className="flex gap-3 p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl text-left">
                 <Info className="w-5 h-5 text-indigo-400 shrink-0" />
                 <p className="text-[11px] font-medium text-slate-400 leading-relaxed">

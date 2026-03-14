@@ -4,7 +4,7 @@ import { Shield, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { useWalletStore } from '@/store';
 
 export default function TrustShieldIndicator() {
-  const { shieldStatus } = useWalletStore();
+  const { shieldStatus, t } = useWalletStore();
   const isActive = shieldStatus === 'active';
 
   return (
@@ -43,7 +43,7 @@ export default function TrustShieldIndicator() {
 
       <div className="flex-1">
         <h3 className="font-bold text-lg">
-          {isActive ? 'Shield Status: Active' : 'Shield Alert'}
+          {t(isActive ? 'shield_active' : 'shield_alert')}
         </h3>
         <p className="text-sm opacity-80">
           {isActive 
@@ -52,7 +52,7 @@ export default function TrustShieldIndicator() {
         </p>
       </div>
 
-      <div className="flex items-center gap-1 bg-white/5 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
+      <div className="flex items-center gap-1 bg-white/5 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider text-white">
         <div className={`w-2 h-2 rounded-full ${isActive ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400 animate-pulse'}`} />
         AI Protected
       </div>
