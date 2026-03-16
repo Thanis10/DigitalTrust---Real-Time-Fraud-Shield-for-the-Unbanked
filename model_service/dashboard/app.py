@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 import requests
@@ -6,7 +7,7 @@ import streamlit as st
 
 st.set_page_config(page_title="Digital Trust Fraud Shield", layout="wide", page_icon="shield")
 
-API_URL = "http://127.0.0.1:8000/predict_fraud"
+API_URL = os.getenv("API_URL", "http://127.0.0.1:8000/predict_fraud")
 
 st.title("Digital Trust: Real-Time Fraud Shield")
 st.markdown("Behavioral profiling, contextual risk signals, and low-latency fraud decisions.")

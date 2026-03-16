@@ -3,6 +3,9 @@ setlocal
 
 set "ROOT=%~dp0"
 if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
+set "API_PORT=8000"
+set "STREAMLIT_PORT=8501"
+set "NEXT_PORT=3000"
 
 set "MODEL_DIR=%ROOT%\model_service"
 if not exist "%MODEL_DIR%\api\main.py" (
@@ -21,22 +24,28 @@ if not exist "%MODEL_DIR%\api\main.py" (
   exit /b 1
 )
 
+netstat -ano | findstr /R /C:":8000 .*LISTENING" >nul 2>nul
+if not errorlevel 1 (
+  set "API_PORT=8001"
+  echo [WARN] Port 8000 is already in use. Switching model API to 8001.
+)
+
 echo [INFO] Root app directory: %ROOT%
 echo [INFO] Model directory: %MODEL_DIR%
-echo [INFO] Starting FastAPI on http://127.0.0.1:8000
-start "VHack Side Model API" cmd /k "cd /d ""%MODEL_DIR%"" && python -m uvicorn api.main:app --host 127.0.0.1 --port 8000"
+echo [INFO] Starting FastAPI on http://127.0.0.1:%API_PORT%
+start "VHack Side Model API" cmd /k "cd /d ""%MODEL_DIR%"" && python -m uvicorn api.main:app --host 127.0.0.1 --port %API_PORT%"
 
-echo [INFO] Starting Streamlit on http://127.0.0.1:8501
-start "VHack Side Model Dashboard" cmd /k "cd /d ""%MODEL_DIR%"" && streamlit run dashboard/app.py --server.port 8501"
+echo [INFO] Starting Streamlit on http://127.0.0.1:%STREAMLIT_PORT%
+start "VHack Side Model Dashboard" cmd /k "cd /d ""%MODEL_DIR%"" && set API_URL=http://127.0.0.1:%API_PORT%/predict_fraud && streamlit run dashboard/app.py --server.port %STREAMLIT_PORT%"
 
-echo [INFO] Starting Next.js on http://127.0.0.1:3000
-start "VHack Wallet App" cmd /k "cd /d ""%ROOT%"" && set FRAUD_API_URL=http://127.0.0.1:8000 && npm run dev -- --port 3000"
+echo [INFO] Starting Next.js on http://127.0.0.1:%NEXT_PORT%
+start "VHack Wallet App" cmd /k "cd /d ""%ROOT%"" && set FRAUD_API_URL=http://127.0.0.1:%API_PORT% && npm run dev -- --port %NEXT_PORT%"
 
 echo.
 echo [READY] Launchers started.
-echo Wallet App:      http://127.0.0.1:3000
-echo Model API:       http://127.0.0.1:8000
-echo Streamlit Demo:  http://127.0.0.1:8501
+echo Wallet App:      http://127.0.0.1:%NEXT_PORT%
+echo Model API:       http://127.0.0.1:%API_PORT%
+echo Streamlit Demo:  http://127.0.0.1:%STREAMLIT_PORT%
 echo.
 echo If a port is already busy, that window will show the fallback port or error.
 
