@@ -232,8 +232,24 @@ export default function WalletPage() {
     latestUserMessage, latestVerification, latestChannel, latestConfidence, latestAgentReport, edgeFallbackUsed,
     setTransactionResult, clearTransactionResult,
     deductBalance, deductVault, addWalletTransaction, setShieldStatus, 
-    isUserVerified, setVerified, walletBalance, vaultBalance, lockVault, unlockVault, locationCurrency, t
+    isUserVerified, setVerified, walletBalance, vaultBalance, lockVault, unlockVault, locationCurrency, t,
+    fraudEngineActive, setFraudEngineActive
   } = useWalletStore();
+
+  useEffect(() => {
+    const checkFraudStatus = async () => {
+      try {
+        const res = await axios.get('/api/fraud-status');
+        setFraudEngineActive(res.data.active);
+      } catch (e) {
+        setFraudEngineActive(false);
+      }
+    };
+    
+    checkFraudStatus();
+    const interval = setInterval(checkFraudStatus, 10000); // Check every 10 seconds
+    return () => clearInterval(interval);
+  }, [setFraudEngineActive]);
 
   const processTransaction = async (data: any) => {
     setLoading(true);

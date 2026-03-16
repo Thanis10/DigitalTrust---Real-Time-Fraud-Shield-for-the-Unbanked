@@ -15,6 +15,22 @@ export type Transaction = {
   confidence?: number;
 };
 
+export type Card = {
+  id: string;
+  type: 'VISA' | 'MASTERCARD';
+  number: string;
+  holder: string;
+  expiry: string;
+  cvv?: string;
+};
+
+export type BankAccount = {
+  id: string;
+  bankName: string;
+  accountNumber: string;
+  accountHolder: string;
+};
+
 // Initial mock data
 const INITIAL_TRANSACTIONS: Transaction[] = [
   {
@@ -27,6 +43,17 @@ const INITIAL_TRANSACTIONS: Transaction[] = [
     risk_score: 12,
     decision: 'APPROVE',
     confidence: 99.2,
+  }
+];
+
+const INITIAL_CARDS: Card[] = [
+  {
+    id: 'card-1',
+    type: 'VISA',
+    number: '4289 1102 8834 9012',
+    holder: 'Alex User',
+    expiry: '12/28',
+    cvv: '832'
   }
 ];
 
@@ -206,12 +233,15 @@ interface WalletStore {
   vaultBalance: number;
   vaultLocked: boolean;
   shieldStatus: 'active' | 'alert';
+  fraudEngineActive: boolean;
   locationCurrency: { code: string; symbol: string; name: string };
   userLanguage: string;
   supportedLanguages: { code: string; name: string; flag: string }[];
   fraudProtectionActive: boolean;
   isUserVerified: boolean;
   transactionHistory: Transaction[];
+  cards: Card[];
+  bankAccounts: BankAccount[];
   latestRiskScore: number | null;
   latestDecision: 'APPROVE' | 'FLAG' | 'BLOCK' | null;
   latestExplanation: string | null;
@@ -231,10 +261,13 @@ interface WalletStore {
   setTransactionResult: (data: any) => void;
   clearTransactionResult: () => void;
   setShieldStatus: (status: 'active' | 'alert') => void;
+  setFraudEngineActive: (active: boolean) => void;
   setLocationInfo: (currency: { code: string; symbol: string; name: string }, lang: string) => void;
   setUserLanguage: (lang: string) => void;
   setVerified: (verified: boolean) => void;
   setFraudProtection: (active: boolean) => void;
+  addCard: (card: Card) => void;
+  addBankAccount: (bank: BankAccount) => void;
   t: (key: string) => any;
 }
 
@@ -243,6 +276,7 @@ export const useWalletStore = create<WalletStore>((set, get) => ({
   vaultBalance: 5800.00,
   vaultLocked: false,
   shieldStatus: 'active',
+  fraudEngineActive: true,
   locationCurrency: { code: 'MYR', symbol: 'RM', name: 'Malaysia' },
   userLanguage: 'ms-MY',
   supportedLanguages: [
@@ -252,6 +286,8 @@ export const useWalletStore = create<WalletStore>((set, get) => ({
   fraudProtectionActive: true,
   isUserVerified: false,
   transactionHistory: [],
+  cards: INITIAL_CARDS,
+  bankAccounts: [],
   latestRiskScore: null,
   latestDecision: null,
   latestExplanation: null,
@@ -296,10 +332,13 @@ export const useWalletStore = create<WalletStore>((set, get) => ({
   }),
   clearTransactionResult: () => set({ latestRiskScore: null, latestDecision: null }),
   setShieldStatus: (status) => set({ shieldStatus: status }),
+  setFraudEngineActive: (active) => set({ fraudEngineActive: active }),
   setLocationInfo: (currency, lang) => set({ locationCurrency: currency, userLanguage: lang }),
   setUserLanguage: (lang) => set({ userLanguage: lang }),
   setVerified: (verified) => set({ isUserVerified: verified }),
   setFraudProtection: (active) => set({ fraudProtectionActive: active }),
+  addCard: (card) => set((state) => ({ cards: [card, ...state.cards] })),
+  addBankAccount: (bank) => set((state) => ({ bankAccounts: [bank, ...state.bankAccounts] })),
 }));
 
 interface RiskStore {
