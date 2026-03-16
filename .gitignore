@@ -34,3 +34,21 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local tooling / generated
+.agent/
+.agents/
+.claude/
+skills-lock.json
+run_logs/
+
+# local notes
+Case Study.txt
+
+# standalone nested repos kept outside root git
+model/
+model_side_runtime/
+
+# python cache
+__pycache__/
+*.pyc
