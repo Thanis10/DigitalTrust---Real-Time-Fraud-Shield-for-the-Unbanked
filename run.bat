@@ -24,6 +24,12 @@ if not exist "%MODEL_DIR%\api\main.py" (
   exit /b 1
 )
 
+echo [INFO] Stopping existing listeners on ports 3000, 8000, 8001, and 8501
+call :kill_port 3000
+call :kill_port 8000
+call :kill_port 8001
+call :kill_port 8501
+
 netstat -ano | findstr /R /C:":8000 .*LISTENING" >nul 2>nul
 if not errorlevel 1 (
   set "API_PORT=8001"
@@ -50,3 +56,21 @@ echo.
 echo If a port is already busy, that window will show the fallback port or error.
 
 endlocal
+exit /b 0
+
+:kill_port
+set "TARGET_PORT=%~1"
+set "KILLED_ANY="
+for /f "tokens=5" %%A in ('netstat -ano ^| findstr /R /C:":%TARGET_PORT% .*LISTENING"') do (
+  if not "%%A"=="0" (
+    echo [INFO] Stopping PID %%A on port %TARGET_PORT%
+    taskkill /PID %%A /F >nul 2>nul
+    set "KILLED_ANY=1"
+  )
+)
+if defined KILLED_ANY (
+  timeout /t 1 /nobreak >nul
+)
+set "KILLED_ANY="
+set "TARGET_PORT="
+exit /b 0
