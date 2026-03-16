@@ -30,11 +30,12 @@ call :kill_port 8000
 call :kill_port 8001
 call :kill_port 8501
 
-netstat -ano | findstr /R /C:":8000 .*LISTENING" >nul 2>nul
-if not errorlevel 1 (
+for /f %%A in ('powershell -NoProfile -Command "(Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -eq 8000 } | Select-Object -ExpandProperty OwningProcess -Unique | Select-Object -First 1)"') do set "PORT8000_PID=%%A"
+if defined PORT8000_PID (
   set "API_PORT=8001"
   echo [WARN] Port 8000 is already in use. Switching model API to 8001.
 )
+set "PORT8000_PID="
 
 echo [INFO] Root app directory: %ROOT%
 echo [INFO] Model directory: %MODEL_DIR%
@@ -61,7 +62,7 @@ exit /b 0
 :kill_port
 set "TARGET_PORT=%~1"
 set "KILLED_ANY="
-for /f "tokens=5" %%A in ('netstat -ano ^| findstr /R /C:":%TARGET_PORT% .*LISTENING"') do (
+for /f %%A in ('powershell -NoProfile -Command "(Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -eq %TARGET_PORT% } | Select-Object -ExpandProperty OwningProcess -Unique)"') do (
   if not "%%A"=="0" (
     echo [INFO] Stopping PID %%A on port %TARGET_PORT%
     taskkill /PID %%A /F >nul 2>nul
