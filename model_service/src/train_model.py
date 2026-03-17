@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shap
 import argparse
 import json
 from pathlib import Path
@@ -25,7 +26,7 @@ from fraud_pipeline import threshold_table
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_DATA_DIR = ROOT_DIR / "IEEE Dataset"
+DEFAULT_DATA_DIR = ROOT_DIR / "ieee_cis_data"
 ARTIFACT_PATHS = default_training_paths(ROOT_DIR)
 
 
@@ -42,7 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--sample-frac",
         type=float,
-        default=0.2,
+        default=1.0,
         help="Fraction of rows to sample for faster iteration. Use 1.0 for the full training set.",
     )
     parser.add_argument(
@@ -327,6 +328,7 @@ def save_artifacts(
         "threshold_sweep": threshold_rows,
         "threshold_objectives": threshold_objectives,
         "selected_params": selected_params,
+        "explainability": "SHAP TreeExplainer used for per-transaction feature attribution",
         "notes": {
             "latency_target": "single-row LightGBM inference under real-time wallet constraints",
             "strategy": "behavioral profiling + contextual scoring + time-aware validation",
@@ -363,6 +365,36 @@ def main() -> None:
         n_estimators=args.n_estimators,
     )
     model = train_model(train_X=train_X, train_y=train_y, params=best_params)
+    
+    # ==============================
+    # SHAP EXPLAINABILITY
+    # ==============================
+    print("\nGenerating SHAP explainer...")
+
+    explainer = shap.TreeExplainer(model)
+
+    print("Computing SHAP values on validation set...")
+    sample_X = test_X.sample(min(1000, len(test_X)), random_state=args.random_state)
+    shap_values = explainer.shap_values(sample_X)
+    
+    print("\nTop SHAP feature importance:")
+
+    feature_importance = np.abs(shap_values).mean(axis=0)
+    importance_df = pd.DataFrame({
+        "feature": MODEL_FEATURE_COLUMNS,
+        "importance": feature_importance
+    }).sort_values("importance", ascending=False)
+
+    print(importance_df.head(15))
+
+    # Save explainer if artifacts enabled
+    if args.save_artifacts:
+        shap_path = ARTIFACT_PATHS["model"].parent / "shap_explainer.pkl"
+        joblib.dump(explainer, shap_path)
+        print(f"Saved SHAP explainer to: {shap_path}")
+
+    # ==============================
+
     _, metrics, threshold_rows, threshold_objectives = evaluate_model(model, test_X, test_y)
     thresholds = choose_thresholds(threshold_rows)
 

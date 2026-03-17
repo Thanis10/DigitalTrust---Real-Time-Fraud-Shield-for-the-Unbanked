@@ -9,7 +9,8 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-
+import joblib
+import shap
 
 MODEL_VERSION = "ieee-hybrid-v3"
 MODEL_FEATURE_COLUMNS = [
@@ -887,6 +888,36 @@ def choose_thresholds(rows: list[dict[str, float]]) -> dict[str, float]:
         "flag_min": float(flag_row["threshold"]),
         "block_min": float(block_row["threshold"]),
     }
+
+
+def generate_shap_explanation(
+    model,
+    explainer,
+    feature_row: dict[str, float],
+) -> list[dict[str, float]]:
+
+    feature_frame = pd.DataFrame([feature_row], columns=MODEL_FEATURE_COLUMNS)
+    shap_values = explainer.shap_values(feature_frame)[0]
+    contributions = list(zip(MODEL_FEATURE_COLUMNS, shap_values))
+
+    contributions_sorted = sorted(
+        contributions,
+        key=lambda x: abs(x[1]),
+        reverse=True,
+    )
+
+    top_features = contributions_sorted[:5]
+    explanation = []
+
+    for feature, value in top_features:
+        explanation.append(
+            {
+                "feature": feature,
+                "impact": float(value),
+                "direction": "increase_risk" if value > 0 else "reduce_risk",
+            }
+        )
+    return explanation
 
 
 def default_training_paths(root_dir: Path) -> dict[str, Path]:
