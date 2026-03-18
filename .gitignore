@@ -52,3 +52,5 @@ model_side_runtime/
 # python cache
 __pycache__/
 *.pyc
+
+.venv/
