@@ -305,12 +305,25 @@ export default function WalletPage() {
       
       const txId = `WTX-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
       const newTx: Transaction = {
-        id: txId, user_id: payload.user_id, recipient: data.recipient, amount: data.amount, 
-        location: payload.location, device_id: payload.device_id, timestamp: payload.timestamp,
-        risk_score: result.risk_score, decision: result.decision,
+        id: txId,
+        user_id: payload.user_id,
+        recipient: data.recipient,
+        amount: data.amount,
+        location: payload.location,
+        device_id: payload.device_id,
+        timestamp: payload.timestamp,
+        risk_score: result.risk_score,
+        decision: result.decision,
         reason: result.reason || data.reference || 'Transfer',
-        confidence: result.confidence, account_type: data.account_type
+        confidence: result.confidence,
+        account_type: data.account_type,
       };
+
+      // always send every evaluated transaction to ops center
+      addToDashboardFeed(newTx);
+
+      // keep wallet history for all evaluated transactions too
+      addWalletTransaction(newTx);
 
       if (result.decision === 'APPROVE') {
         if (data.account_type === 'VAULT') {
@@ -319,8 +332,7 @@ export default function WalletPage() {
         } else {
           deductBalance(data.amount);
         }
-        addWalletTransaction(newTx);
-        addToDashboardFeed(newTx);
+
         setIsSendModalOpen(false);
         setPendingTransaction(null);
         setShowResultModal(true);
@@ -328,14 +340,18 @@ export default function WalletPage() {
         setShieldStatus('alert');
         setIsFraudAlertOpen(true);
         setIsSendModalOpen(false);
+        setPendingTransaction(null);
+        setShowResultModal(true);
       } else if (result.decision === 'BLOCK') {
         if (data.account_type === 'VAULT' || result.vault_locked) {
           lockVault();
         }
+
         setIsSendModalOpen(false);
         setPendingTransaction(null);
         setShowResultModal(true);
       }
+      
       
     } catch (error) {
       console.error(error);
@@ -389,7 +405,7 @@ export default function WalletPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#02000a] flex items-center justify-center p(0 sm:p-4 font-sans selection:bg-indigo-500/30 relative">
+    <div className="min-h-screen bg-[#02000a] flex items-center justify-center p-0 sm:p-4 font-sans selection:bg-indigo-500/30 relative">
       <LocationAwareWallet />
       
       <Link href="/" className="absolute top-8 left-8 hidden sm:flex items-center gap-2 text-slate-400 hover:text-white transition-colors group z-20 bg-white/5 px-4 py-2 rounded-full backdrop-blur-sm border border-white/10">
