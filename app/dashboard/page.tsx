@@ -94,7 +94,7 @@ export default function Dashboard() {
                <div className="space-y-4">
                  <div className="flex justify-between items-center">
                    <span className="text-[10px] text-slate-400 uppercase font-bold">Model Version</span>
-                   <span className="text-xs font-bold text-white">v2.4.0-Stable</span>
+                   <span className="text-xs font-bold text-white">ieee-hybrid-v4</span>
                  </div>
                  <div className="flex justify-between items-center">
                    <span className="text-[10px] text-slate-400 uppercase font-bold">TPU Load</span>

@@ -41,6 +41,9 @@ export default function SendMoneyModal({ isOpen, onClose, onSend, loading }: Pro
   const [voiceHint, setVoiceHint] = useState<string | null>(null);
   const [voiceLang, setVoiceLang] = useState<string>('en');
   const [nlpPayload, setNlpPayload] = useState<{ amount?: number; recipient?: string } | null>(null);
+  const [scenarioDevice, setScenarioDevice] = useState('iPhone 15 Pro');
+  const [scenarioLocation, setScenarioLocation] = useState('Malaysia');
+  const [scenarioUserId, setScenarioUserId] = useState('USR-ALI-001');
   
   const { locationCurrency, t } = useWalletStore();
 
@@ -123,10 +126,10 @@ export default function SendMoneyModal({ isOpen, onClose, onSend, loading }: Pro
     e.preventDefault();
     if (!amount || !recipient) return;
     onSend({
-      user_id: 'USR-8821',
+      user_id: scenarioUserId,
       amount: parseFloat(amount),
-      location: 'Singapore',
-      device_id: 'iPhone 15 Pro',
+      location: scenarioLocation,
+      device_id: scenarioDevice,
       recipient,
       reference,
       category,
@@ -280,10 +283,45 @@ export default function SendMoneyModal({ isOpen, onClose, onSend, loading }: Pro
                   </div>
                 </div>
 
+                {/* Demo Scenario Presets */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Demo Scenarios</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAmount('50');
+                        setRecipient('ali.gig');
+                        setScenarioDevice('iPhone 15 Pro');
+                        setScenarioLocation('Malaysia');
+                        setScenarioUserId('USR-ALI-001');
+                      }}
+                      className="p-3 rounded-2xl border bg-emerald-500/10 border-emerald-500/30 text-left"
+                    >
+                      <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest block">Normal</span>
+                      <span className="text-[10px] text-slate-400">Known device · Low amount</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAmount('5000');
+                        setRecipient('unknown-acct-99');
+                        setScenarioDevice('Unknown-Emulator-XC2');
+                        setScenarioLocation('Lagos, Nigeria');
+                        setScenarioUserId('USR-SUSPECT-099');
+                      }}
+                      className="p-3 rounded-2xl border bg-red-500/10 border-red-500/30 text-left"
+                    >
+                      <span className="text-[9px] font-black text-red-400 uppercase tracking-widest block">Suspicious</span>
+                      <span className="text-[10px] text-slate-400">New device · High amount</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* Submit Button */}
                 <div className="pt-4">
-                  <Button 
-                    type="submit" 
+                  <Button
+                    type="submit"
                     disabled={loading}
                     className="w-full h-20 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-black text-xl rounded-[2rem] shadow-[0_10px_40px_rgba(99,102,241,0.4)] transition-all active:scale-95"
                   >

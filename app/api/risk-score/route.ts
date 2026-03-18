@@ -21,8 +21,10 @@ const buildUserMessage = (decision: FraudDecision, account: AccountType, reason?
 
 const applyVaultPolicy = (score: number, baseDecision: FraudDecision, account: AccountType): FraudDecision => {
   if (account !== 'VAULT') return baseDecision;
-  if (score >= 35) return 'BLOCK';
-  if (score >= 20) return 'FLAG';
+  // Vault uses stricter thresholds (~50% of model thresholds) to protect daily wages.
+  // Model trained: flag=50, block=80 → vault: flag=25, block=40
+  if (score >= 40) return 'BLOCK';
+  if (score >= 25) return 'FLAG';
   return 'APPROVE';
 };
 
@@ -72,8 +74,9 @@ const edgeFallback = (payload: any) => {
 
   const normalizedScore = Math.min(100, Math.round(score));
   let decision: FraudDecision = 'APPROVE';
-  if (normalizedScore >= 65) decision = 'BLOCK';
-  else if (normalizedScore >= 40) decision = 'FLAG';
+  // Aligned with trained model thresholds (flag=0.50, block=0.80 → 50, 80 on 0-100 scale)
+  if (normalizedScore >= 80) decision = 'BLOCK';
+  else if (normalizedScore >= 50) decision = 'FLAG';
 
   return {
     risk_score: normalizedScore,
@@ -102,7 +105,7 @@ If phishing_flag is true, connect it to the decision.
 Return only the report sentence(s), no formatting.`;
 
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${key}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -119,7 +122,7 @@ Return only the report sentence(s), no formatting.`;
     const text = json?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
     if (!text) throw new Error('Empty response');
 
-    return { summary: text, model: 'gemini-pro', used_fallback: false };
+    return { summary: text, model: 'gemini-1.5-flash', used_fallback: false };
   } catch (err) {
     return {
       summary: `Agent fallback: Blocked ${payload.amount} transfer. Device ${payload.device_id || 'unknown'} reused by multiple accounts in last hour. Keep Vault locked.`,
@@ -223,7 +226,7 @@ export async function POST(req: Request) {
       confidence:
         typeof modelResult.confidence === 'number'
           ? Number(modelResult.confidence)
-          : Number(normalizedScore.toFixed(1)),
+          : Math.round(Math.max(Math.abs(normalizedScore - 50) * 2, 55)),
       decision: adjustedDecision,
       reason: finalReason,
       model_version: modelResult.model_version || (edgeFallbackUsed ? 'edge-fallback-v1' : undefined),

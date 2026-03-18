@@ -127,9 +127,10 @@ def health_check() -> dict[str, Any]:
 
 
 def decide(probability: float) -> str:
+    """Use the trained thresholds from model_config.json — no hardcoded overrides."""
     thresholds = MODEL_CONFIG.get("decision_thresholds", {})
-    flag_min = max(float(thresholds.get("flag_min", 0.35)), 0.25)
-    block_min = max(float(thresholds.get("block_min", 0.75)), 0.75)
+    flag_min = float(thresholds.get("flag_min", 0.50))
+    block_min = float(thresholds.get("block_min", 0.80))
 
     if probability >= block_min:
         return "BLOCK"
@@ -171,8 +172,11 @@ def predict_fraud(transaction: TransactionPayload) -> dict[str, Any]:
                 location_registry=LOCATION_REGISTRY,
             )
 
+        confidence = min(99, round(55 + abs(probability - 0.5) * 90, 1))
+
         return {
             "risk_score": round(probability, 4),
+            "confidence": confidence,
             "model_score": round(model_probability, 4),
             "policy_score": round(float(policy_state["policy_risk"]), 4),
             "decision": decision,
@@ -181,7 +185,8 @@ def predict_fraud(transaction: TransactionPayload) -> dict[str, Any]:
             "policy_triggers": policy_state["triggers"],
             "latency_ms": latency_ms,
             "model_version": MODEL_CONFIG.get("model_version", MODEL_VERSION),
-            "features_used": FEATURE_NAMES,
+            "feature_count": len(FEATURE_NAMES),
+            "timestamp": time.time(),
         }
     except HTTPException:
         raise

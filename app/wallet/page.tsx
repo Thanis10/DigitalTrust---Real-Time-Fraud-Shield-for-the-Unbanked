@@ -362,6 +362,33 @@ export default function WalletPage() {
   const handleVerify = (method: string) => {
     setIsFraudAlertOpen(false);
     setShieldStatus('active');
+    if (pendingTransaction) {
+      const data = pendingTransaction;
+      const txId = `WTX-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+      const newTx: Transaction = {
+        id: txId,
+        user_id: data.user_id,
+        recipient: data.recipient,
+        amount: data.amount,
+        location: data.location,
+        device_id: data.device_id,
+        timestamp: new Date().toISOString(),
+        risk_score: latestRiskScore ?? 0,
+        decision: 'FLAG',
+        reason: latestExplanation ?? 'Verified by user after flag',
+        confidence: latestConfidence ?? 50,
+        account_type: data.account_type,
+      };
+      if (data.account_type === 'VAULT') {
+        deductVault(data.amount);
+      } else {
+        deductBalance(data.amount);
+      }
+      addWalletTransaction(newTx);
+      addToDashboardFeed(newTx);
+      setPendingTransaction(null);
+      setShowResultModal(true);
+    }
     clearTransactionResult();
   };
 
