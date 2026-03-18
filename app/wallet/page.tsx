@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useWalletStore, Transaction, useTransactionStore } from '@/store';
 import Link from 'next/link';
+import type { LucideIcon } from 'lucide-react';
 import { 
   ChevronLeft, ArrowUpRight, ArrowDownLeft, ShoppingBag, Lock, Wifi, WifiOff, CreditCard, Wallet
 } from 'lucide-react';
@@ -43,6 +44,18 @@ const STATIC_MOCK_TXNS = [
   { id: '3', name: 'Salary', desc: 'Yesterday', amount: 2000.00, icon: ArrowDownLeft, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
 ];
 
+type ActivityItem = {
+  id: string;
+  name: string;
+  desc: string;
+  amount: number;
+  icon: LucideIcon;
+  color: string;
+  bg: string;
+  isDynamic: boolean;
+  originalTx: Transaction;
+};
+
 function HomeDashboard({ 
   onSendClick, 
   onTopUpClick, 
@@ -62,25 +75,33 @@ function HomeDashboard({
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [activeCard, setActiveCard] = useState<'main' | 'vault'>('main');
 
-  const allTxns = [
-    ...transactionHistory.map(t => ({
+  const allTxns: ActivityItem[] = [
+    ...transactionHistory.map((t): ActivityItem => ({
       id: t.id,
       name: t.reason || 'Transfer',
       desc: `${format(new Date(t.timestamp), 'MMM d, h:mm a')}${t.account_type === 'VAULT' ? ' • Vault' : ''}`,
-      amount: -t.amount, 
+      amount: -t.amount,
       icon: ArrowUpRight,
       color: 'text-indigo-400',
       bg: 'bg-indigo-500/10',
       isDynamic: true,
-      originalTx: t
+      originalTx: t,
     })),
-    ...STATIC_MOCK_TXNS.map(t => ({
+    ...STATIC_MOCK_TXNS.map((t): ActivityItem => ({
       ...t,
+      isDynamic: false,
       originalTx: {
-        id: t.id, user_id: 'me', amount: t.amount, location: 'Local', device_id: 'Current Device',
-        timestamp: new Date().toISOString(), risk_score: 0, decision: 'APPROVE' as const, reason: t.name
-      }
-    }))
+        id: t.id,
+        user_id: 'me',
+        amount: t.amount,
+        location: 'Local',
+        device_id: 'Current Device',
+        timestamp: new Date().toISOString(),
+        risk_score: 0,
+        decision: 'APPROVE',
+        reason: t.name,
+      },
+    })),
   ].slice(0, 4);
 
   return (
@@ -160,7 +181,7 @@ function HomeDashboard({
             <motion.div 
               key={tx.id}
               initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
-              onClick={() => setSelectedTx(tx.originalTx)}
+              onClick={() => tx.originalTx && setSelectedTx(tx.originalTx)}
               className="flex items-center justify-between p-4 rounded-[1.5rem] bg-white/5 border border-white/5 hover:border-indigo-500/30 transition-all cursor-pointer"
             >
               <div className="flex items-center gap-4">
