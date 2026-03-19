@@ -16,7 +16,7 @@ const LOCATIONS = [
   {
     country: 'Malaysia',
     currency: { code: 'MYR', symbol: 'RM', name: 'Malaysian Ringgit' },
-    language: 'en-MY'
+    language: 'en-PH'
   }
 ];
 

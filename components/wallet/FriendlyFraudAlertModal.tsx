@@ -33,7 +33,7 @@ export default function FriendlyFraudAlertModal({ isOpen, onClose, onVerify }: F
               <div className="space-y-3">
                 <h2 className="text-3xl font-black text-white leading-tight">Hold on! 🛡</h2>
                 <p className="text-slate-400 font-medium">
-                  {t('ms-MY') ? 'Pemindahan ini kelihatan agak luar biasa untuk anda. Sila sahkan identiti anda.' : 'This transfer looks a little unusual for you. To keep your earnings safe, please confirm it\'s really you.'}
+                  This transfer looks a little unusual for you. To keep your earnings safe, please confirm it&apos;s really you.
                 </p>
               </div>
 

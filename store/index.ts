@@ -278,7 +278,7 @@ export const useWalletStore = create<WalletStore>((set, get) => ({
   shieldStatus: 'active',
   fraudEngineActive: true,
   locationCurrency: { code: 'MYR', symbol: 'RM', name: 'Malaysia' },
-  userLanguage: 'ms-MY',
+  userLanguage: 'en-PH',
   supportedLanguages: [
     { code: 'ms-MY', name: 'Bahasa Melayu', flag: '🇲🇾' },
     { code: 'en-PH', name: 'English', flag: '🇺🇸' },
