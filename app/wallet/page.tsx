@@ -338,7 +338,7 @@ export default function WalletPage() {
         timestamp: payload.timestamp,
         risk_score: result.risk_score,
         decision: result.decision,
-        reason: result.reason || data.reference || 'Transfer',
+        reason: result.activity_label || data.reference || `Transfer to ${data.recipient}`,
         confidence: result.confidence,
         account_type: data.account_type,
       };
