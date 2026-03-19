@@ -17,7 +17,7 @@ const fadeIn = {
   initial: { opacity: 0, y: 40 },
   whileInView: { opacity: 1, y: 0 },
   viewport: { once: true, margin: "-100px" },
-  transition: { duration: 0.7, ease: "easeOut" }
+  transition: { duration: 0.7 }
 };
 
 const staggerContainer = {
@@ -37,7 +37,7 @@ const Navbar = () => (
   <motion.nav 
     initial={{ y: -100, opacity: 0 }}
     animate={{ y: 0, opacity: 1 }}
-    transition={{ duration: 0.8, ease: "easeOut" }}
+    transition={{ duration: 0.8 }}
     className="fixed top-0 w-full z-50 border-b border-white/5 bg-background/80 backdrop-blur-xl px-6 py-4 flex items-center justify-between"
   >
     <div className="flex items-center gap-3">
@@ -601,7 +601,7 @@ const CTASection = () => (
        initial={{ opacity: 0, y: 60, scale: 0.95 }}
        whileInView={{ opacity: 1, y: 0, scale: 1 }}
        viewport={{ once: true }}
-       transition={{ duration: 0.8, ease: "easeOut" }}
+       transition={{ duration: 0.8 }}
        className="max-w-5xl mx-auto bg-gradient-to-br from-primary/20 to-secondary/10 border border-white/10 rounded-[3rem] p-12 md:p-20 text-center relative overflow-hidden group"
      >
         <div className="absolute inset-0 bg-hero-gradient mix-blend-overlay opacity-50 group-hover:scale-110 transition-transform duration-1000" />

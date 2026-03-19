@@ -62,6 +62,7 @@ function HomeDashboard({
   onReceiveClick, 
   onVaultTransferClick,
   onVerifyClick,
+  onVoiceSendClick,
   isOffline
 }: { 
   onSendClick: () => void;
@@ -69,6 +70,7 @@ function HomeDashboard({
   onReceiveClick: () => void;
   onVaultTransferClick: (mode: 'deposit' | 'withdraw') => void;
   onVerifyClick: () => void;
+  onVoiceSendClick: () => void;
   isOffline: boolean;
 }) {
   const { transactionHistory, locationCurrency, latestDecision, latestExplanation, isUserVerified, t } = useWalletStore();
@@ -162,7 +164,7 @@ function HomeDashboard({
         <TrustShieldIndicator />
       </div>
 
-      <VoiceTransactionInput />
+      <VoiceTransactionInput onStartVoice={onVoiceSendClick} />
 
       {latestDecision === 'BLOCK' && latestExplanation && (
         <UserFriendlyAIExplanation reasons={latestExplanation.split('.').filter(r => r.trim())} />
@@ -227,6 +229,7 @@ export default function WalletPage() {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [isOffline, setIsOffline] = useState(false);
+  const [startVoiceOnOpen, setStartVoiceOnOpen] = useState(false);
   
   const addToDashboardFeed = useTransactionStore((state) => state.addTransaction);
 
@@ -474,11 +477,18 @@ export default function WalletPage() {
             {activeTab === 'home' && (
               <HomeDashboard 
                 key="home" 
-                onSendClick={() => setIsSendModalOpen(true)}
+                onSendClick={() => {
+                  setStartVoiceOnOpen(false);
+                  setIsSendModalOpen(true);
+                }}
                 onTopUpClick={() => setIsTopUpOpen(true)}
                 onReceiveClick={() => setIsReceiveModalOpen(true)}
                 onVaultTransferClick={handleVaultTransferRequest}
                 onVerifyClick={() => setIsSecurityOpen(true)}
+                onVoiceSendClick={() => {
+                  setStartVoiceOnOpen(true);
+                  setIsSendModalOpen(true);
+                }}
                 isOffline={isOffline}
               />
             )}
@@ -490,7 +500,17 @@ export default function WalletPage() {
 
         <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} onAddClick={() => setIsSendModalOpen(true)} />
 
-        <SendMoneyModal isOpen={isSendModalOpen} onClose={() => setIsSendModalOpen(false)} onSend={handleSendTransactionRequest} loading={loading} />
+        <SendMoneyModal
+          isOpen={isSendModalOpen}
+          onClose={() => {
+            setIsSendModalOpen(false);
+            setStartVoiceOnOpen(false);
+          }}
+          onSend={handleSendTransactionRequest}
+          loading={loading}
+          autoStartVoice={startVoiceOnOpen}
+          onVoiceStarted={() => setStartVoiceOnOpen(false)}
+        />
         <TopUpModal isOpen={isTopUpOpen} onClose={() => setIsTopUpOpen(false)} />
         <ReceiveMoneyModal isOpen={isReceiveModalOpen} onClose={() => setIsReceiveModalOpen(false)} />
         <VaultTransferModal isOpen={isVaultModalOpen} onClose={() => setIsVaultModalOpen(false)} mode={vaultMode} />
