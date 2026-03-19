@@ -1,24 +1,31 @@
 import { NextResponse } from 'next/server';
 
-const FRAUD_API_URL=process.env.FRAUD_API_URL||'http://127.0.0.1:8000';
+const RAW_FRAUD_API_URL = process.env.FRAUD_API_URL || 'http://127.0.0.1:8000';
+const FRAUD_API_URL = RAW_FRAUD_API_URL.trim().replace(/\/+$/, '');
 
 export async function GET() {
+  const healthUrl = `${FRAUD_API_URL}/`;
+
   try {
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 2000);
+    const timeout = setTimeout(() => controller.abort(), 2500);
 
-    const response = await fetch(`${FRAUD_API_URL}/`, {
-      signal: controller.signal,
+    const response = await fetch(healthUrl, {
+      method: 'GET',
       cache: 'no-store',
+      signal: controller.signal,
     });
 
-    clearTimeout(id);
+    clearTimeout(timeout);
 
     if (!response.ok) {
       return NextResponse.json({
         active: false,
-        checkedUrl: `${FRAUD_API_URL}/`,
+        rawEnv: RAW_FRAUD_API_URL,
+        normalizedBaseUrl: FRAUD_API_URL,
+        checkedUrl: healthUrl,
         status: response.status,
+        reason: `Health check returned ${response.status}`,
       });
     }
 
@@ -26,14 +33,18 @@ export async function GET() {
 
     return NextResponse.json({
       active: true,
-      checkedUrl: `${FRAUD_API_URL}/`,
+      rawEnv: RAW_FRAUD_API_URL,
+      normalizedBaseUrl: FRAUD_API_URL,
+      checkedUrl: healthUrl,
       upstream: data,
     });
   } catch (err: any) {
     return NextResponse.json({
       active: false,
-      checkedUrl: `${FRAUD_API_URL}/`,
-      error: err?.message || 'Unknown error',
+      rawEnv: RAW_FRAUD_API_URL,
+      normalizedBaseUrl: FRAUD_API_URL,
+      checkedUrl: healthUrl,
+      error: err?.name === 'AbortError' ? 'Request timed out' : err?.message || 'Unknown error',
     });
   }
 }
