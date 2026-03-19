@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 const FRAUD_API_URL =
-  process.env.FRAUD_API_URL || 'http://localhost:8000';
+  process.env.FRAUD_API_URL || 'http://127.0.0.1:8000';
 
 type FraudDecision = 'APPROVE' | 'FLAG' | 'BLOCK';
 type AccountType = 'MAIN' | 'VAULT';
