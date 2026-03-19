@@ -2,7 +2,6 @@
 import { Transaction } from '@/store';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { ShieldAlert, Info, MapPin, Smartphone, Activity, ArrowRight, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -87,15 +86,12 @@ export default function AIExplanationPanel({ transaction, onClose }: { transacti
                   "{transaction.reason}"
                </p>
                <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase">
-                  <ArrowRight className="w-3 h-3 text-primary" /> Model Version: v2.4.0-Alpha
+                  <ArrowRight className="w-3 h-3 text-primary" /> Model Version: ieee-hybrid-v4
                </div>
             </div>
           </div>
         )}
 
-        <Button className="w-full h-12 rounded-xl bg-white/5 border border-white/5 text-slate-400 hover:text-white hover:bg-white/10 transition-all font-bold text-xs uppercase tracking-widest">
-          Download Analysis Report (PDF)
-        </Button>
       </div>
     </motion.div>
   );

@@ -12,12 +12,41 @@ import pandas as pd
 import joblib
 import shap
 
-MODEL_VERSION = "ieee-hybrid-v3"
+MODEL_VERSION = "ieee-hybrid-v4"
+
+# V columns: Vesta's anonymized transaction fingerprints — the biggest untapped signal in
+# the IEEE-CIS dataset. LightGBM handles NaN natively; no fill needed at training time.
+# At inference (wallet payload), all V columns default to NaN so the model follows the
+# NaN branch it learned during training.
+_V_COLS: list[str] = [f"V{i}" for i in range(1, 340)]
+V_FEATURE_SET: frozenset[str] = frozenset(_V_COLS)
+
+# Features that should default to NaN (not 0.0) when missing — LightGBM learns the
+# optimal NaN-branch direction during training, so inference must also send NaN.
+NAN_DEFAULT_FEATURES: frozenset[str] = frozenset(
+    _V_COLS + [
+        "d1_days", "d2_days", "d3_days", "d4_days", "d5_days",
+        "d10_days", "d11_days", "d15_days",
+        "dist1_proxy", "dist2_proxy",
+        "card2_norm", "card3_norm", "card5_norm",
+    ]
+)
+
+CARD4_MAP: dict[str, int] = {
+    "visa": 0,
+    "mastercard": 1,
+    "discover": 2,
+    "american express": 3,
+    "diners club": 4,
+}
+
 MODEL_FEATURE_COLUMNS = [
+    # ---- behavioural / amount profile (original 50) ----
     "amount",
     "log_transaction_amt",
     "transaction_hour",
     "is_night",
+    "is_weekend",
     "profile_tx_count_before",
     "profile_avg_amount",
     "profile_std_amount",
@@ -66,7 +95,45 @@ MODEL_FEATURE_COLUMNS = [
     "identity_signal_mean",
     "identity_signal_std",
     "identity_signal_missing_count",
-]
+    # ---- card attributes ----
+    "card2_norm",
+    "card3_norm",
+    "card4_code",
+    "card5_norm",
+    "card1_freq",
+    # ---- target encoding (cumulative fraud rate per entity, leak-free) ----
+    "card1_fraud_rate",
+    "addr1_fraud_rate",
+    "p_emaildomain_fraud_rate",
+    "card1_addr1_fraud_rate",
+    # ---- aggregation (cumulative mean amount per entity) ----
+    "card1_amt_mean",
+    "addr1_amt_mean",
+    "p_emaildomain_amt_mean",
+    "card1_addr1_amt_mean",
+    "amt_deviation_from_card1",
+    # ---- frequency encoding ----
+    "addr1_freq",
+    "p_emaildomain_freq",
+    # ---- amount splitting (fraud = round numbers, legit = specific cents) ----
+    "amount_dollars",
+    "amount_cents",
+    # ---- feature interactions ----
+    "amount_x_new_device",
+    "amount_x_new_location",
+    "velocity_x_new_device",
+    "amount_deviation_x_is_night",
+    # ---- individual timedelta features (D columns) ----
+    "d1_days",
+    "d2_days",
+    "d3_days",
+    "d4_days",
+    "d5_days",
+    "d10_days",
+    "d11_days",
+    "d15_days",
+    # ---- Vesta engineered features: V1-V339 ----
+] + _V_COLS
 
 TRANSACTION_TYPE_MAP = {
     "w": 0,
@@ -294,6 +361,34 @@ def build_ieee_profile_keys(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def clean_raw_data(df: pd.DataFrame) -> pd.DataFrame:
+    """Remove garbage rows before feature engineering.
+
+    Tree-based models handle outliers natively, so we do NOT clip feature
+    values — we only remove rows that are clearly corrupt or meaningless.
+    """
+    n_before = len(df)
+
+    # 1. Drop rows with no / zero / negative transaction amount
+    df = df[df["TransactionAmt"].notna() & (df["TransactionAmt"] > 0)].copy()
+
+    # 2. Drop exact duplicate TransactionIDs (keep first occurrence)
+    df = df.drop_duplicates(subset=["TransactionID"], keep="first")
+
+    # 3. Remove rows missing >90% of all columns (corrupt / empty rows)
+    missing_rate = df.isna().mean(axis=1)
+    df = df[missing_rate <= 0.90].copy()
+
+    # 4. Remove impossible TransactionDT (negative or zero)
+    if "TransactionDT" in df.columns:
+        df = df[df["TransactionDT"] > 0].copy()
+
+    n_after = len(df)
+    removed = n_before - n_after
+    print(f"Data cleaning: {n_before:,} → {n_after:,} rows ({removed:,} removed, {removed / max(n_before, 1):.2%} garbage)")
+    return df.reset_index(drop=True)
+
+
 def build_training_features(df: pd.DataFrame) -> pd.DataFrame:
     ordered = df.sort_values("TransactionDT").reset_index(drop=True).copy()
     keys = build_ieee_profile_keys(ordered)
@@ -366,6 +461,138 @@ def build_training_features(df: pd.DataFrame) -> pd.DataFrame:
         | ordered.get("id_30", pd.Series(index=ordered.index)).notna()
     ).astype(np.int8)
 
+    # ---- weekend flag ----
+    # TransactionDT is seconds from a reference epoch. Day 0 = Thursday (epoch day 0 = Thu).
+    # (day_number + 4) % 7: 0=Thu,1=Fri,2=Sat,3=Sun,4=Mon,5=Tue,6=Wed  → >=2 and <=3 = weekend
+    ordered["is_weekend"] = (
+        ((ordered["timestamp_seconds"] // 86400 + 4) % 7 >= 5).astype(np.int8)
+    )
+
+    # ---- card attributes ----
+    def _card4_encode(val: Any) -> int:
+        text = normalize_text(val, "unknown")
+        return CARD4_MAP.get(text, len(CARD4_MAP))
+
+    # Keep NaN for missing card attributes — "unknown card" ≠ "card value 0".
+    ordered["card2_norm"] = ordered.get("card2", pd.Series(np.nan, index=ordered.index)).astype(float) / 1000.0
+    ordered["card3_norm"] = ordered.get("card3", pd.Series(np.nan, index=ordered.index)).astype(float) / 150.0
+    ordered["card4_code"] = ordered.get("card4", pd.Series("unknown", index=ordered.index)).apply(_card4_encode).astype(float)
+    ordered["card5_norm"] = ordered.get("card5", pd.Series(np.nan, index=ordered.index)).astype(float) / 200.0
+    # card1 frequency: cumulative count of how many times this card has appeared (sorted by time)
+    ordered["card1_freq"] = ordered.groupby(
+        ordered.get("card1", pd.Series("unknown", index=ordered.index)).fillna("unknown").astype(str),
+        sort=False,
+    ).cumcount().astype(float)
+
+    # ---- individual D column timedeltas ----
+    # D1=days since last transaction, D2=days since last txn on this device,
+    # D3=days since last txn on this address, D10=days since last txn on billing addr,
+    # D11=days since last txn (may overlap D1), D15=days since last addr change
+    _D_FEATURES = [("D1", "d1_days"), ("D2", "d2_days"), ("D3", "d3_days"),
+                   ("D4", "d4_days"), ("D5", "d5_days"), ("D10", "d10_days"),
+                   ("D11", "d11_days"), ("D15", "d15_days")]
+    for src_col, feat_name in _D_FEATURES:
+        if src_col in ordered.columns:
+            # Keep NaN — LightGBM learns optimal NaN branch direction natively.
+            # Only clip real values; NaN passes through clip() unchanged.
+            ordered[feat_name] = ordered[src_col].clip(upper=640.0).astype(float)
+        else:
+            ordered[feat_name] = np.nan
+
+    # ---- V columns: Vesta anonymized transaction features ----
+    # Keep NaN so LightGBM learns the optimal NaN branch direction during training.
+    for v_col in _V_COLS:
+        if v_col in ordered.columns:
+            ordered[v_col] = ordered[v_col].astype(float)
+        else:
+            ordered[v_col] = np.nan
+
+    # ===========================================================================
+    # ADVANCED FEATURE ENGINEERING — target encoding, aggregation, interactions
+    # ===========================================================================
+
+    # ---- TARGET ENCODING: cumulative fraud rate per entity (Bayesian smoothed) ----
+    # For each row, uses ONLY rows that appeared BEFORE it (leak-free).
+    # Bayesian smoothing pulls rare entities toward the global fraud rate.
+    _TE_SMOOTHING = 20
+    _global_fraud_prior = ordered["isFraud"].expanding().mean().shift(1).fillna(
+        ordered["isFraud"].mean()
+    )
+    _global_amt_prior = ordered["amount"].expanding().mean().shift(1).fillna(
+        ordered["amount"].median()
+    )
+
+    for _raw_col, _feat_name in [
+        ("card1", "card1_fraud_rate"),
+        ("addr1", "addr1_fraud_rate"),
+        ("P_emaildomain", "p_emaildomain_fraud_rate"),
+    ]:
+        _key = ordered.get(_raw_col, pd.Series("unknown", index=ordered.index)).fillna("unknown").astype(str)
+        ordered["_te_grp"] = _key
+        _grp = ordered.groupby("_te_grp", sort=False)
+        _n = _grp.cumcount().astype(float)
+        _fraud_sum = _grp["isFraud"].cumsum().astype(float) - ordered["isFraud"].astype(float)
+        ordered[_feat_name] = (_fraud_sum + _TE_SMOOTHING * _global_fraud_prior) / (_n + _TE_SMOOTHING)
+
+    # card1+addr1 combo target encoding (captures fraud clustering in card+address pairs)
+    _combo_key = (
+        ordered.get("card1", pd.Series("unk", index=ordered.index)).fillna("unk").astype(str)
+        + "|"
+        + ordered.get("addr1", pd.Series("unk", index=ordered.index)).fillna("unk").astype(str)
+    )
+    ordered["_te_grp"] = _combo_key
+    _grp = ordered.groupby("_te_grp", sort=False)
+    _n = _grp.cumcount().astype(float)
+    _fraud_sum = _grp["isFraud"].cumsum().astype(float) - ordered["isFraud"].astype(float)
+    ordered["card1_addr1_fraud_rate"] = (_fraud_sum + _TE_SMOOTHING * _global_fraud_prior) / (_n + _TE_SMOOTHING)
+    ordered.drop(columns=["_te_grp"], inplace=True, errors="ignore")
+
+    # ---- AGGREGATION: cumulative mean amount per entity ----
+    for _raw_col, _feat_name in [
+        ("card1", "card1_amt_mean"),
+        ("addr1", "addr1_amt_mean"),
+        ("P_emaildomain", "p_emaildomain_amt_mean"),
+    ]:
+        _key = ordered.get(_raw_col, pd.Series("unknown", index=ordered.index)).fillna("unknown").astype(str)
+        ordered["_agg_grp"] = _key
+        _grp = ordered.groupby("_agg_grp", sort=False)
+        _n = _grp.cumcount().astype(float)
+        _amt_sum = _grp["amount"].cumsum() - ordered["amount"]
+        ordered[_feat_name] = np.where(_n > 0, _amt_sum / _n, _global_amt_prior)
+
+    # card1+addr1 combo mean amount
+    ordered["_agg_grp"] = _combo_key
+    _grp = ordered.groupby("_agg_grp", sort=False)
+    _n = _grp.cumcount().astype(float)
+    _amt_sum = _grp["amount"].cumsum() - ordered["amount"]
+    ordered["card1_addr1_amt_mean"] = np.where(_n > 0, _amt_sum / _n, _global_amt_prior)
+    ordered.drop(columns=["_agg_grp"], inplace=True, errors="ignore")
+
+    # How unusual is this amount for this card? (entity-level deviation)
+    ordered["amt_deviation_from_card1"] = (
+        ordered["amount"] / ordered["card1_amt_mean"].clip(lower=1.0)
+    ).clip(lower=0.0, upper=50.0)
+
+    # ---- FREQUENCY ENCODING: cumulative count per entity ----
+    ordered["addr1_freq"] = ordered.groupby(
+        ordered.get("addr1", pd.Series("unknown", index=ordered.index)).fillna("unknown").astype(str),
+        sort=False,
+    ).cumcount().astype(float)
+    ordered["p_emaildomain_freq"] = ordered.groupby(
+        ordered.get("P_emaildomain", pd.Series("unknown", index=ordered.index)).fillna("unknown").astype(str),
+        sort=False,
+    ).cumcount().astype(float)
+
+    # ---- AMOUNT SPLITTING: fraud uses round numbers, legit has specific cents ----
+    ordered["amount_dollars"] = np.floor(ordered["amount"]).astype(float)
+    ordered["amount_cents"] = ((ordered["amount"] % 1) * 100).round(0).astype(float)
+
+    # ---- FEATURE INTERACTIONS: explicit combinations for low colsample_bytree ----
+    ordered["amount_x_new_device"] = ordered["amount"] * ordered["new_device_flag"]
+    ordered["amount_x_new_location"] = ordered["amount"] * ordered["new_location_flag"]
+    ordered["velocity_x_new_device"] = ordered["tx_velocity_1h"] * ordered["new_device_flag"]
+    ordered["amount_deviation_x_is_night"] = ordered["amount_deviation"] * ordered["is_night"]
+
     ordered["device_missing_flag"] = (ordered["device_key"] == "unknown_device").astype(np.int8)
     ordered["missing_feature_count"] = ordered.isna().sum(axis=1).astype(float)
 
@@ -373,8 +600,9 @@ def build_training_features(df: pd.DataFrame) -> pd.DataFrame:
     email_right = ordered.get("R_emaildomain", pd.Series(index=ordered.index)).fillna("unknown")
     ordered["email_domain_match"] = (email_left == email_right).astype(np.int8)
 
-    dist1 = ordered.get("dist1", pd.Series(0.0, index=ordered.index)).fillna(0.0).astype(float)
-    dist2 = ordered.get("dist2", pd.Series(0.0, index=ordered.index)).fillna(0.0).astype(float)
+    # Keep NaN for missing distances — "unknown distance" ≠ "zero distance".
+    dist1 = ordered.get("dist1", pd.Series(np.nan, index=ordered.index)).astype(float)
+    dist2 = ordered.get("dist2", pd.Series(np.nan, index=ordered.index)).astype(float)
     ordered["dist1_proxy"] = dist1.clip(lower=0.0, upper=5000.0)
     ordered["dist2_proxy"] = dist2.clip(lower=0.0, upper=5000.0)
 
@@ -471,7 +699,18 @@ def select_feature_matrix(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
 
 
 def feature_row_to_frame(feature_row: dict[str, Any], feature_names: list[str]) -> pd.DataFrame:
-    aligned = {name: float(feature_row.get(name, 0.0)) for name in feature_names}
+    aligned: dict[str, float] = {}
+    for name in feature_names:
+        val = feature_row.get(name)
+        if val is None:
+            # Features in NAN_DEFAULT_FEATURES (V cols, D cols, dist, card) default
+            # to NaN so the model follows its trained NaN branch direction.
+            aligned[name] = np.nan if name in NAN_DEFAULT_FEATURES else 0.0
+        else:
+            try:
+                aligned[name] = float(val)
+            except (TypeError, ValueError):
+                aligned[name] = np.nan if name in NAN_DEFAULT_FEATURES else 0.0
     return pd.DataFrame([aligned], columns=feature_names)
 
 
@@ -481,6 +720,7 @@ class RuntimeProfile:
     last_seen_ts: int
     tx_count: int
     amount_sum: float
+    amount_sum_sq: float
     recent_tx_timestamps: deque[int]
     recent_amounts: deque[tuple[int, float]]
     known_devices: set[str]
@@ -493,6 +733,7 @@ def make_runtime_profile(now_ts: int) -> RuntimeProfile:
         last_seen_ts=now_ts,
         tx_count=0,
         amount_sum=0.0,
+        amount_sum_sq=0.0,
         recent_tx_timestamps=deque(),
         recent_amounts=deque(),
         known_devices=set(),
@@ -518,6 +759,13 @@ def build_runtime_feature_row(
     historical_avg = (
         profile.amount_sum / profile.tx_count if profile.tx_count > 0 else float(getattr(payload, "user_avg_amount", 0.0) or amount or 1.0)
     )
+    if profile.tx_count > 1:
+        _mean = profile.amount_sum / profile.tx_count
+        _variance = max(0.0, profile.amount_sum_sq / profile.tx_count - _mean ** 2)
+        _computed_std = float(np.sqrt(_variance)) if _variance > 0.0 else max(historical_avg * 0.35, 1.0)
+    else:
+        _computed_std = max(historical_avg * 0.35, 1.0)
+    profile_std_amount = max(_computed_std, 1.0)
     seconds_since_prev_tx = (
         timestamp_seconds - profile.last_seen_ts if profile.tx_count > 0 else 86400
     )
@@ -605,6 +853,17 @@ def build_runtime_feature_row(
     device_type = getattr(payload, "device_type", "mobile")
     transaction_type = getattr(payload, "transaction_type", "transfer")
 
+    # ---- new features: card, weekend, D columns ----
+    card2_norm = float(getattr(payload, "card2_norm", 0.0) or 0.0)
+    card3_norm = float(getattr(payload, "card3_norm", 0.0) or 0.0)
+    card4_code = float(CARD4_MAP.get(normalize_text(getattr(payload, "card4", "unknown")), len(CARD4_MAP)))
+    card5_norm = float(getattr(payload, "card5_norm", 0.0) or 0.0)
+    card1_freq = float(getattr(payload, "card1_freq", 1.0) or 1.0)  # 1 = not brand-new, not high-frequency
+    is_weekend = float(int((timestamp_seconds // 86400 + 4) % 7 >= 5))
+    # D columns, V columns, dist, card: wallet doesn't provide these.
+    # feature_row_to_frame defaults them to NaN via NAN_DEFAULT_FEATURES,
+    # so the model follows its trained NaN branch direction.
+
     feature_row = {
         "amount": amount,
         "log_transaction_amt": float(np.log1p(amount)),
@@ -612,11 +871,11 @@ def build_runtime_feature_row(
         "is_night": float(int(((timestamp_seconds // 3600) % 24) in [0, 1, 2, 3, 4])),
         "profile_tx_count_before": float(profile.tx_count),
         "profile_avg_amount": float(max(historical_avg, 1.0)),
-        "profile_std_amount": float(max(historical_avg * 0.35, 1.0)),
+        "profile_std_amount": float(profile_std_amount),
         "profile_max_amount_before": float(max(getattr(payload, "profile_max_amount", historical_avg * 1.5) or historical_avg, 1.0)),
         "amount_deviation": float(safe_amount_deviation(amount, historical_avg)),
         "amount_zscore": float(
-            np.clip((amount - historical_avg) / max(historical_avg * 0.35, 1.0), -20.0, 20.0)
+            np.clip((amount - historical_avg) / profile_std_amount, -20.0, 20.0)
         ),
         "amount_vs_profile_max": float(
             np.clip(amount / max(float(getattr(payload, "profile_max_amount", historical_avg * 1.5) or 1.0), 1.0), 0.0, 50.0)
@@ -664,6 +923,39 @@ def build_runtime_feature_row(
         "identity_signal_mean": float(identity_signal_mean),
         "identity_signal_std": float(identity_signal_std),
         "identity_signal_missing_count": float(identity_signal_missing_count),
+        # ---- new features ----
+        "card2_norm": card2_norm,
+        "card3_norm": card3_norm,
+        "card4_code": card4_code,
+        "card5_norm": card5_norm,
+        "card1_freq": card1_freq,
+        "is_weekend": is_weekend,
+        # ---- target encoding defaults (global fraud rate ≈ 0.035 = neutral) ----
+        "card1_fraud_rate": 0.035,
+        "addr1_fraud_rate": 0.035,
+        "p_emaildomain_fraud_rate": 0.035,
+        "card1_addr1_fraud_rate": 0.035,
+        # ---- aggregation defaults ----
+        "card1_amt_mean": float(amount),
+        "addr1_amt_mean": float(amount),
+        "p_emaildomain_amt_mean": float(amount),
+        "card1_addr1_amt_mean": float(amount),
+        "amt_deviation_from_card1": 1.0,
+        # ---- frequency defaults ----
+        "addr1_freq": 1.0,
+        "p_emaildomain_freq": 1.0,
+        # ---- amount splitting ----
+        "amount_dollars": float(np.floor(amount)),
+        "amount_cents": float(round((amount % 1) * 100)),
+        # ---- feature interactions ----
+        "amount_x_new_device": float(amount * new_device_flag),
+        "amount_x_new_location": float(amount * new_location_flag),
+        "velocity_x_new_device": float(tx_velocity_1h * new_device_flag),
+        "amount_deviation_x_is_night": float(
+            safe_amount_deviation(amount, historical_avg)
+            * int(((timestamp_seconds // 3600) % 24) in [0, 1, 2, 3, 4])
+        ),
+        # D columns, V columns omitted — feature_row_to_frame defaults them to NaN
     }
 
     telemetry = {
@@ -697,6 +989,7 @@ def update_runtime_profile(
     profile.last_seen_ts = timestamp_seconds
     profile.tx_count += 1
     profile.amount_sum += amount
+    profile.amount_sum_sq += amount ** 2
     profile.recent_tx_timestamps.append(timestamp_seconds)
     profile.recent_amounts.append((timestamp_seconds, amount))
     profile.known_devices.add(device_id)

@@ -20,6 +20,7 @@ from fraud_pipeline import MODEL_FEATURE_COLUMNS
 from fraud_pipeline import MODEL_VERSION
 from fraud_pipeline import build_training_features
 from fraud_pipeline import choose_thresholds
+from fraud_pipeline import clean_raw_data
 from fraud_pipeline import default_training_paths
 from fraud_pipeline import select_feature_matrix
 from fraud_pipeline import threshold_table
@@ -61,8 +62,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--n-estimators",
         type=int,
-        default=600,
-        help="Number of LightGBM trees.",
+        default=2000,
+        help="Maximum number of LightGBM trees (early stopping will find the true optimum).",
     )
     parser.add_argument(
         "--save-artifacts",
@@ -120,6 +121,9 @@ def train_model(
     train_X: pd.DataFrame,
     train_y: pd.Series,
     params: dict[str, float | int],
+    eval_X: pd.DataFrame | None = None,
+    eval_y: pd.Series | None = None,
+    early_stopping_rounds: int = 100,
 ) -> lgb.LGBMClassifier:
     neg_count = int((train_y == 0).sum())
     pos_count = int((train_y == 1).sum())
@@ -128,6 +132,7 @@ def train_model(
     model = lgb.LGBMClassifier(
         objective="binary",
         boosting_type="gbdt",
+        metric="auc",
         n_estimators=int(params["n_estimators"]),
         learning_rate=float(params["learning_rate"]),
         num_leaves=int(params["num_leaves"]),
@@ -142,7 +147,18 @@ def train_model(
         scale_pos_weight=scale_pos_weight,
         verbosity=-1,
     )
-    model.fit(train_X, train_y)
+
+    fit_kwargs: dict = {}
+    if eval_X is not None and eval_y is not None:
+        fit_kwargs["eval_set"] = [(eval_X, eval_y)]
+        fit_kwargs["callbacks"] = [
+            lgb.early_stopping(stopping_rounds=early_stopping_rounds, verbose=False),
+            lgb.log_evaluation(period=50),
+        ]
+
+    model.fit(train_X, train_y, **fit_kwargs)
+    if hasattr(model, "best_iteration_") and model.best_iteration_ and model.best_iteration_ > 0:
+        print(f"  Early stopping at iteration {model.best_iteration_}")
     return model
 
 
@@ -163,15 +179,31 @@ def split_train_dev_time_aware(train_frame: pd.DataFrame) -> tuple[pd.DataFrame,
 
 
 def candidate_param_sets(n_estimators: int, random_state: int) -> list[dict[str, float | int]]:
+    # With full data (590K rows) and early stopping, n_estimators is a ceiling not a fixed count.
+    # Lower learning rates (0.005–0.02) let the model build more nuanced trees over more rounds.
+    # Tuned for high-dimensional input (V columns add ~339 features).
     return [
+        {
+            "name": "slow-deep",
+            "n_estimators": n_estimators,
+            "learning_rate": 0.008,
+            "num_leaves": 255,
+            "max_depth": -1,
+            "subsample": 0.85,
+            "colsample_bytree": 0.35,
+            "min_child_samples": 60,
+            "reg_alpha": 0.2,
+            "reg_lambda": 2.0,
+            "random_state": random_state,
+        },
         {
             "name": "balanced-wide",
             "n_estimators": n_estimators,
-            "learning_rate": 0.03,
-            "num_leaves": 96,
+            "learning_rate": 0.012,
+            "num_leaves": 127,
             "max_depth": -1,
             "subsample": 0.85,
-            "colsample_bytree": 0.85,
+            "colsample_bytree": 0.4,
             "min_child_samples": 50,
             "reg_alpha": 0.1,
             "reg_lambda": 1.0,
@@ -179,28 +211,41 @@ def candidate_param_sets(n_estimators: int, random_state: int) -> list[dict[str,
         },
         {
             "name": "deeper-regularized",
-            "n_estimators": int(n_estimators * 1.25),
-            "learning_rate": 0.025,
-            "num_leaves": 128,
+            "n_estimators": n_estimators,
+            "learning_rate": 0.01,
+            "num_leaves": 255,
             "max_depth": -1,
-            "subsample": 0.9,
-            "colsample_bytree": 0.9,
+            "subsample": 0.85,
+            "colsample_bytree": 0.35,
             "min_child_samples": 80,
             "reg_alpha": 0.3,
-            "reg_lambda": 2.0,
+            "reg_lambda": 3.0,
             "random_state": random_state,
         },
         {
-            "name": "compact-high-bias",
-            "n_estimators": int(n_estimators * 0.9),
-            "learning_rate": 0.04,
-            "num_leaves": 64,
-            "max_depth": 10,
+            "name": "wide-gentle",
+            "n_estimators": n_estimators,
+            "learning_rate": 0.015,
+            "num_leaves": 191,
+            "max_depth": -1,
             "subsample": 0.8,
-            "colsample_bytree": 0.8,
+            "colsample_bytree": 0.4,
+            "min_child_samples": 70,
+            "reg_alpha": 0.15,
+            "reg_lambda": 1.5,
+            "random_state": random_state,
+        },
+        {
+            "name": "compact-conservative",
+            "n_estimators": n_estimators,
+            "learning_rate": 0.02,
+            "num_leaves": 63,
+            "max_depth": 8,
+            "subsample": 0.8,
+            "colsample_bytree": 0.5,
             "min_child_samples": 120,
             "reg_alpha": 0.2,
-            "reg_lambda": 1.5,
+            "reg_lambda": 2.0,
             "random_state": random_state,
         },
     ]
@@ -218,20 +263,26 @@ def select_best_params(
     best_params: dict[str, float | int] | None = None
     best_score = -1.0
 
-    print("\n--- Candidate Model Search ---")
-    for params in candidate_param_sets(n_estimators, random_state):
-        model = train_model(fit_X, fit_y, params)
+    # Use a reduced estimator budget for the search to keep it reasonable.
+    search_estimators = min(n_estimators, 1200)
+
+    print("\n--- Candidate Model Search (with early stopping) ---")
+    for params in candidate_param_sets(search_estimators, random_state):
+        model = train_model(fit_X, fit_y, params, eval_X=dev_X, eval_y=dev_y, early_stopping_rounds=150)
         probabilities = model.predict_proba(dev_X)[:, 1]
         pr_auc = average_precision_score(dev_y, probabilities)
         roc_auc = roc_auc_score(dev_y, probabilities)
         score = pr_auc + (roc_auc * 0.15)
-        print(f"{params['name']}: PR-AUC={pr_auc:.4f} ROC-AUC={roc_auc:.4f}")
+        print(f"  {params['name']}: PR-AUC={pr_auc:.4f}  ROC-AUC={roc_auc:.4f}  score={score:.4f}")
         if score > best_score:
             best_score = score
             best_params = params
 
     assert best_params is not None
-    print(f"Selected candidate: {best_params['name']}")
+    # Restore full n_estimators for the final training run (early stopping will find the optimum).
+    best_params = dict(best_params)
+    best_params["n_estimators"] = n_estimators
+    print(f"Selected candidate: {best_params['name']}  (full n_estimators={n_estimators})")
     return best_params
 
 
@@ -349,6 +400,7 @@ def main() -> None:
         raise ValueError("--validation-days must be at least 1.")
 
     raw_df = load_ieee_dataset(args.data_dir, args.sample_frac, args.random_state)
+    raw_df = clean_raw_data(raw_df)
     feature_frame = build_training_features(raw_df)
     train_frame, test_frame = split_time_aware(feature_frame, args.validation_days)
     train_X, train_y = select_feature_matrix(train_frame)
@@ -364,7 +416,15 @@ def main() -> None:
         random_state=args.random_state,
         n_estimators=args.n_estimators,
     )
-    model = train_model(train_X=train_X, train_y=train_y, params=best_params)
+    print(f"\n--- Final Training Run ({args.n_estimators} trees max, early stopping=200) ---")
+    model = train_model(
+        train_X=train_X,
+        train_y=train_y,
+        params=best_params,
+        eval_X=test_X,
+        eval_y=test_y,
+        early_stopping_rounds=200,
+    )
     
     # ==============================
     # SHAP EXPLAINABILITY

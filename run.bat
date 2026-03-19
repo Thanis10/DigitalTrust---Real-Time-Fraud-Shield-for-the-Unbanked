@@ -6,6 +6,37 @@ if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
 set "API_PORT=8000"
 set "STREAMLIT_PORT=8501"
 set "NEXT_PORT=3000"
+set "PYTHON_CMD="
+
+where python >nul 2>nul
+if not errorlevel 1 (
+  set "PYTHON_CMD=python"
+) else (
+  where py >nul 2>nul
+  if not errorlevel 1 (
+    set "PYTHON_CMD=py -3"
+  )
+)
+
+if not defined PYTHON_CMD (
+  echo [ERROR] Python was not found on PATH.
+  echo Install Python 3 and ensure either `python` or `py` works in terminal.
+  exit /b 1
+)
+
+where node >nul 2>nul
+if errorlevel 1 (
+  echo [ERROR] Node.js was not found on PATH.
+  echo Install Node.js so the Next.js wallet app can run.
+  exit /b 1
+)
+
+where npm >nul 2>nul
+if errorlevel 1 (
+  echo [ERROR] npm was not found on PATH.
+  echo Install Node.js/npm so the Next.js wallet app can run.
+  exit /b 1
+)
 
 set "MODEL_DIR=%ROOT%\model_service"
 if not exist "%MODEL_DIR%\api\main.py" (
@@ -18,6 +49,8 @@ if not exist "%MODEL_DIR%\api\main.py" (
 if not exist "%MODEL_DIR%\api\main.py" (
   echo [ERROR] Could not find the model API folder.
   echo Expected either:
+  echo   %ROOT%\model_service\api\main.py
+  echo or
   echo   %ROOT%\model_side_runtime\api\main.py
   echo or
   echo   %ROOT%\model\api\main.py
@@ -39,11 +72,12 @@ set "PORT8000_PID="
 
 echo [INFO] Root app directory: %ROOT%
 echo [INFO] Model directory: %MODEL_DIR%
+echo [INFO] Python command: %PYTHON_CMD%
 echo [INFO] Starting FastAPI on http://127.0.0.1:%API_PORT%
-start "VHack Side Model API" cmd /k "cd /d ""%MODEL_DIR%"" && python -m uvicorn api.main:app --host 127.0.0.1 --port %API_PORT%"
+start "VHack Side Model API" cmd /k "cd /d ""%MODEL_DIR%"" && %PYTHON_CMD% -m uvicorn api.main:app --host 127.0.0.1 --port %API_PORT%"
 
 echo [INFO] Starting Streamlit on http://127.0.0.1:%STREAMLIT_PORT%
-start "VHack Side Model Dashboard" cmd /k "cd /d ""%MODEL_DIR%"" && set API_URL=http://127.0.0.1:%API_PORT%/predict_fraud && streamlit run dashboard/app.py --server.port %STREAMLIT_PORT%"
+start "VHack Side Model Dashboard" cmd /k "cd /d ""%MODEL_DIR%"" && set API_URL=http://127.0.0.1:%API_PORT%/predict_fraud && %PYTHON_CMD% -m streamlit run dashboard/app.py --server.port %STREAMLIT_PORT%"
 
 echo [INFO] Starting Next.js on http://127.0.0.1:%NEXT_PORT%
 start "VHack Wallet App" cmd /k "cd /d ""%ROOT%"" && set FRAUD_API_URL=http://127.0.0.1:%API_PORT% && npm run dev -- --port %NEXT_PORT%"
