@@ -1,5 +1,6 @@
 "use client";
 import { useState } from 'react';
+import { useEffect } from "react";
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, Lock, QrCode, Clipboard, ShoppingBag, Truck, Home, User, Mic, Waves } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -10,17 +11,19 @@ import QRScannerModal from './QRScannerModal';
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onSend: (data: { 
-    user_id: string; 
-    amount: number; 
-    location: string; 
-    device_id: string; 
-    recipient: string; 
-    reference: string; 
+  onSend: (data: {
+    user_id: string;
+    amount: number;
+    location: string;
+    device_id: string;
+    recipient: string;
+    reference: string;
     category: string;
-    account_type: 'MAIN' | 'VAULT'
+    account_type: 'MAIN' | 'VAULT';
   }) => void;
   loading: boolean;
+  autoStartVoice?: boolean;
+  onVoiceStarted?: () => void;
 }
 
 const CATEGORIES = [
@@ -30,7 +33,14 @@ const CATEGORIES = [
   { id: 'rent', name: 'Rent/Bills', icon: Home, color: 'text-purple-400', bg: 'bg-purple-500/10' },
 ];
 
-export default function SendMoneyModal({ isOpen, onClose, onSend, loading }: Props) {
+export default function SendMoneyModal({
+  isOpen,
+  onClose,
+  onSend,
+  loading,
+  autoStartVoice = false,
+  onVoiceStarted,
+}: Props) {
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');

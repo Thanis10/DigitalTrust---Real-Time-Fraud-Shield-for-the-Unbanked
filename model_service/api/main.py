@@ -84,6 +84,7 @@ class TransactionPayload(BaseModel):
 
 
 MODEL: Any | None = None
+EXPLAINER: Any | None = None
 FEATURE_NAMES: list[str] = []
 MODEL_CONFIG: dict[str, Any] = {}
 PROFILE_STORE: dict[str, Any] = {}
@@ -93,6 +94,7 @@ LOCATION_REGISTRY: defaultdict[str, set[str]] = defaultdict(set)
 
 def load_artifacts() -> None:
     global MODEL
+    global EXPLAINER
     global FEATURE_NAMES
     global MODEL_CONFIG
 
@@ -106,6 +108,14 @@ def load_artifacts() -> None:
     FEATURE_NAMES = list(joblib.load(ARTIFACT_PATHS["features"]))
     MODEL_CONFIG = json.loads(ARTIFACT_PATHS["config"].read_text(encoding="ascii"))
     print("[OK] Fraud model bundle loaded.")
+
+    # Add SHAP explainer loading
+    shap_path = ARTIFACT_PATHS["model"].parent / "shap_explainer.pkl"
+    if shap_path.exists():
+        EXPLAINER = joblib.load(shap_path)
+        print("[OK] SHAP explainer loaded.")
+    else:
+        print("[WARN] SHAP explainer not found. Explanations will be skipped.")
 
 
 @app.on_event("startup")
@@ -157,6 +167,12 @@ def predict_fraud(transaction: TransactionPayload) -> dict[str, Any]:
         )
         inference_frame = feature_row_to_frame(feature_row, FEATURE_NAMES)
         model_probability = float(MODEL.predict_proba(inference_frame)[0][1])
+        
+        explanation = []
+        if EXPLAINER is not None:
+            from fraud_pipeline import generate_shap_explanation
+            explanation = generate_shap_explanation(MODEL, EXPLAINER, feature_row)
+        
         policy_state = hybrid_risk_score(model_probability, feature_row)
         probability = float(policy_state["hybrid_risk_score"])
         decision = decide(probability)
@@ -180,6 +196,7 @@ def predict_fraud(transaction: TransactionPayload) -> dict[str, Any]:
             "model_score": round(model_probability, 4),
             "policy_score": round(float(policy_state["policy_risk"]), 4),
             "decision": decision,
+            "explanation": explanation,
             "reasons": reasons,
             "reason": reasons[0] if reasons else "No strong fraud indicators exceeded the decision threshold.",
             "policy_triggers": policy_state["triggers"],

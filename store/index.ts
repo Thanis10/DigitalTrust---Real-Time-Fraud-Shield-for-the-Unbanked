@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
 export type Transaction = {
   id: string;
@@ -211,22 +212,48 @@ interface TransactionStore {
   toggleLiveStream: () => void;
 }
 
-export const useTransactionStore = create<TransactionStore>((set) => ({
-  transactions: INITIAL_TRANSACTIONS,
-  flaggedTransactions: INITIAL_TRANSACTIONS.filter(t => t.decision === 'FLAG'),
-  blockedTransactions: INITIAL_TRANSACTIONS.filter(t => t.decision === 'BLOCK'),
-  liveStreamEnabled: false,
-  addTransaction: (t) =>
-    set((state) => {
-      const newTransactions = [t, ...state.transactions].slice(0, 100);
-      return {
-        transactions: newTransactions,
-        flaggedTransactions: t.decision === 'FLAG' ? [t, ...state.flaggedTransactions].slice(0, 50) : state.flaggedTransactions,
-        blockedTransactions: t.decision === 'BLOCK' ? [t, ...state.blockedTransactions].slice(0, 50) : state.blockedTransactions,
-      };
+export const useTransactionStore = create<TransactionStore>()(
+  persist(
+    (set) => ({
+      transactions: INITIAL_TRANSACTIONS,
+      flaggedTransactions: INITIAL_TRANSACTIONS.filter((t) => t.decision === 'FLAG'),
+      blockedTransactions: INITIAL_TRANSACTIONS.filter((t) => t.decision === 'BLOCK'),
+      liveStreamEnabled: false,
+
+      addTransaction: (t) =>
+        set((state) => {
+          const deduped = state.transactions.filter((tx) => tx.id !== t.id);
+          const newTransactions = [t, ...deduped].slice(0, 100);
+
+          return {
+            transactions: newTransactions,
+            flaggedTransactions:
+              t.decision === 'FLAG'
+                ? [t, ...state.flaggedTransactions.filter((tx) => tx.id !== t.id)].slice(0, 50)
+                : state.flaggedTransactions.filter((tx) => tx.id !== t.id),
+
+            blockedTransactions:
+              t.decision === 'BLOCK'
+                ? [t, ...state.blockedTransactions.filter((tx) => tx.id !== t.id)].slice(0, 50)
+                : state.blockedTransactions.filter((tx) => tx.id !== t.id),
+          };
+        }),
+
+      toggleLiveStream: () =>
+        set((state) => ({ liveStreamEnabled: !state.liveStreamEnabled })),
     }),
-  toggleLiveStream: () => set((state) => ({ liveStreamEnabled: !state.liveStreamEnabled })),
-}));
+    {
+      name: 'digitaltrust-ops-transactions',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        transactions: state.transactions,
+        flaggedTransactions: state.flaggedTransactions,
+        blockedTransactions: state.blockedTransactions,
+        liveStreamEnabled: state.liveStreamEnabled,
+      }),
+    }
+  )
+);
 
 interface WalletStore {
   walletBalance: number;

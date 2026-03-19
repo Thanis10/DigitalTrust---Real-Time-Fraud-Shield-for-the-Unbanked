@@ -22,7 +22,7 @@ npm install
 ```
 2) Environment
 ```
-FRAUD_API_URL=http://localhost:8000    # FastAPI scorer
+FRAUD_API_URL=http://127.0.0.1:8000    # FastAPI scorer
 GEMINI_API_KEY=your_gemini_key_here    # for Agentic AI reports
 ```
 Place in `.env.local` (already added with a sample key for local demos).

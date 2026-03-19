@@ -27,17 +27,20 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const { liveStreamEnabled, toggleLiveStream, addTransaction } = useTransactionStore();
 
-  // Unified simulation engine
+
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (liveStreamEnabled) {
-      // Background generator: adds a new transaction every 2.5 seconds
-      interval = setInterval(() => {
-        addTransaction(generateMockTransaction());
-      }, 2500);
-    }
-    return () => clearInterval(interval);
-  }, [liveStreamEnabled, addTransaction]);
+  let interval: NodeJS.Timeout;
+
+  if (liveStreamEnabled) {
+    interval = setInterval(() => {
+      addTransaction(generateMockTransaction());
+    }, 2500);
+  }
+
+  return () => {
+    if (interval) clearInterval(interval);
+  };
+}, [liveStreamEnabled, addTransaction]);
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Operations Center', href: '/dashboard' },

@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useWalletStore, Transaction, useTransactionStore } from '@/store';
 import Link from 'next/link';
+import type { LucideIcon } from 'lucide-react';
 import { 
   ChevronLeft, ArrowUpRight, ArrowDownLeft, ShoppingBag, Lock, Wifi, WifiOff, CreditCard, Wallet
 } from 'lucide-react';
@@ -43,12 +44,25 @@ const STATIC_MOCK_TXNS = [
   { id: '3', name: 'Salary', desc: 'Yesterday', amount: 2000.00, icon: ArrowDownLeft, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
 ];
 
+type ActivityItem = {
+  id: string;
+  name: string;
+  desc: string;
+  amount: number;
+  icon: LucideIcon;
+  color: string;
+  bg: string;
+  isDynamic: boolean;
+  originalTx: Transaction;
+};
+
 function HomeDashboard({ 
   onSendClick, 
   onTopUpClick, 
   onReceiveClick, 
   onVaultTransferClick,
   onVerifyClick,
+  onVoiceSendClick,
   isOffline
 }: { 
   onSendClick: () => void;
@@ -56,31 +70,40 @@ function HomeDashboard({
   onReceiveClick: () => void;
   onVaultTransferClick: (mode: 'deposit' | 'withdraw') => void;
   onVerifyClick: () => void;
+  onVoiceSendClick: () => void;
   isOffline: boolean;
 }) {
   const { transactionHistory, locationCurrency, latestDecision, latestExplanation, isUserVerified, t } = useWalletStore();
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [activeCard, setActiveCard] = useState<'main' | 'vault'>('main');
 
-  const allTxns = [
-    ...transactionHistory.map(t => ({
+  const allTxns: ActivityItem[] = [
+    ...transactionHistory.map((t): ActivityItem => ({
       id: t.id,
       name: t.reason || 'Transfer',
       desc: `${format(new Date(t.timestamp), 'MMM d, h:mm a')}${t.account_type === 'VAULT' ? ' • Vault' : ''}`,
-      amount: -t.amount, 
+      amount: -t.amount,
       icon: ArrowUpRight,
       color: 'text-indigo-400',
       bg: 'bg-indigo-500/10',
       isDynamic: true,
-      originalTx: t
+      originalTx: t,
     })),
-    ...STATIC_MOCK_TXNS.map(t => ({
+    ...STATIC_MOCK_TXNS.map((t): ActivityItem => ({
       ...t,
+      isDynamic: false,
       originalTx: {
-        id: t.id, user_id: 'me', amount: t.amount, location: 'Local', device_id: 'Current Device',
-        timestamp: new Date().toISOString(), risk_score: 0, decision: 'APPROVE' as const, reason: t.name
-      }
-    }))
+        id: t.id,
+        user_id: 'me',
+        amount: t.amount,
+        location: 'Local',
+        device_id: 'Current Device',
+        timestamp: new Date().toISOString(),
+        risk_score: 0,
+        decision: 'APPROVE',
+        reason: t.name,
+      },
+    })),
   ].slice(0, 4);
 
   return (
@@ -141,7 +164,7 @@ function HomeDashboard({
         <TrustShieldIndicator />
       </div>
 
-      <VoiceTransactionInput />
+      <VoiceTransactionInput onStartVoice={onVoiceSendClick} />
 
       {latestDecision === 'BLOCK' && latestExplanation && (
         <UserFriendlyAIExplanation reasons={latestExplanation.split('.').filter(r => r.trim())} />
@@ -160,7 +183,7 @@ function HomeDashboard({
             <motion.div 
               key={tx.id}
               initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
-              onClick={() => setSelectedTx(tx.originalTx)}
+              onClick={() => tx.originalTx && setSelectedTx(tx.originalTx)}
               className="flex items-center justify-between p-4 rounded-[1.5rem] bg-white/5 border border-white/5 hover:border-indigo-500/30 transition-all cursor-pointer"
             >
               <div className="flex items-center gap-4">
@@ -206,6 +229,7 @@ export default function WalletPage() {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [isOffline, setIsOffline] = useState(false);
+  const [startVoiceOnOpen, setStartVoiceOnOpen] = useState(false);
   
   const addToDashboardFeed = useTransactionStore((state) => state.addTransaction);
 
@@ -305,12 +329,25 @@ export default function WalletPage() {
       
       const txId = `WTX-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
       const newTx: Transaction = {
-        id: txId, user_id: payload.user_id, recipient: data.recipient, amount: data.amount, 
-        location: payload.location, device_id: payload.device_id, timestamp: payload.timestamp,
-        risk_score: result.risk_score, decision: result.decision,
-        reason: result.reason || data.reference || 'Transfer',
-        confidence: result.confidence, account_type: data.account_type
+        id: txId,
+        user_id: payload.user_id,
+        recipient: data.recipient,
+        amount: data.amount,
+        location: payload.location,
+        device_id: payload.device_id,
+        timestamp: payload.timestamp,
+        risk_score: result.risk_score,
+        decision: result.decision,
+        reason: result.activity_label || data.reference || `Transfer to ${data.recipient}`,
+        confidence: result.confidence,
+        account_type: data.account_type,
       };
+
+      // always send every evaluated transaction to ops center
+      addToDashboardFeed(newTx);
+
+      // keep wallet history for all evaluated transactions too
+      addWalletTransaction(newTx);
 
       if (result.decision === 'APPROVE') {
         if (data.account_type === 'VAULT') {
@@ -319,8 +356,7 @@ export default function WalletPage() {
         } else {
           deductBalance(data.amount);
         }
-        addWalletTransaction(newTx);
-        addToDashboardFeed(newTx);
+
         setIsSendModalOpen(false);
         setPendingTransaction(null);
         setShowResultModal(true);
@@ -328,14 +364,18 @@ export default function WalletPage() {
         setShieldStatus('alert');
         setIsFraudAlertOpen(true);
         setIsSendModalOpen(false);
+        setPendingTransaction(null);
+        setShowResultModal(true);
       } else if (result.decision === 'BLOCK') {
         if (data.account_type === 'VAULT' || result.vault_locked) {
           lockVault();
         }
+
         setIsSendModalOpen(false);
         setPendingTransaction(null);
         setShowResultModal(true);
       }
+      
       
     } catch (error) {
       console.error(error);
@@ -416,7 +456,7 @@ export default function WalletPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#02000a] flex items-center justify-center p(0 sm:p-4 font-sans selection:bg-indigo-500/30 relative">
+    <div className="min-h-screen bg-[#02000a] flex items-center justify-center p-0 sm:p-4 font-sans selection:bg-indigo-500/30 relative">
       <LocationAwareWallet />
       
       <Link href="/" className="absolute top-8 left-8 hidden sm:flex items-center gap-2 text-slate-400 hover:text-white transition-colors group z-20 bg-white/5 px-4 py-2 rounded-full backdrop-blur-sm border border-white/10">
@@ -437,11 +477,18 @@ export default function WalletPage() {
             {activeTab === 'home' && (
               <HomeDashboard 
                 key="home" 
-                onSendClick={() => setIsSendModalOpen(true)}
+                onSendClick={() => {
+                  setStartVoiceOnOpen(false);
+                  setIsSendModalOpen(true);
+                }}
                 onTopUpClick={() => setIsTopUpOpen(true)}
                 onReceiveClick={() => setIsReceiveModalOpen(true)}
                 onVaultTransferClick={handleVaultTransferRequest}
                 onVerifyClick={() => setIsSecurityOpen(true)}
+                onVoiceSendClick={() => {
+                  setStartVoiceOnOpen(true);
+                  setIsSendModalOpen(true);
+                }}
                 isOffline={isOffline}
               />
             )}
@@ -453,7 +500,17 @@ export default function WalletPage() {
 
         <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} onAddClick={() => setIsSendModalOpen(true)} />
 
-        <SendMoneyModal isOpen={isSendModalOpen} onClose={() => setIsSendModalOpen(false)} onSend={handleSendTransactionRequest} loading={loading} />
+        <SendMoneyModal
+          isOpen={isSendModalOpen}
+          onClose={() => {
+            setIsSendModalOpen(false);
+            setStartVoiceOnOpen(false);
+          }}
+          onSend={handleSendTransactionRequest}
+          loading={loading}
+          autoStartVoice={startVoiceOnOpen}
+          onVoiceStarted={() => setStartVoiceOnOpen(false)}
+        />
         <TopUpModal isOpen={isTopUpOpen} onClose={() => setIsTopUpOpen(false)} />
         <ReceiveMoneyModal isOpen={isReceiveModalOpen} onClose={() => setIsReceiveModalOpen(false)} />
         <VaultTransferModal isOpen={isVaultModalOpen} onClose={() => setIsVaultModalOpen(false)} mode={vaultMode} />
