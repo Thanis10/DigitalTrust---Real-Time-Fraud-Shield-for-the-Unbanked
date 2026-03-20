@@ -1,8 +1,3 @@
-Here is a **clean, judge-ready, professional README** rewritten to sound stronger, more technical, and more hackathon-polished while keeping all your content.
-(I improved wording, flow, formatting, and impact, but did not change your features.)
-
----
-
 # DigitalTrust — Real-Time Fraud Shield for the Unbanked
 
 **Hackathon Submission — Real-Time Fraud Protection with Explainable AI**
