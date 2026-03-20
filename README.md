@@ -179,11 +179,16 @@ npm install
 
 ### 2. Environment
 
-Create `.env.local`
+You will need a Gemini API Key to run the AI investigator. Follow these steps to get one:
+1. Go to [Google AI Studio](https://aistudio.google.com/app/apikey) and sign in with your Google account.
+2. Click on **Create API key**.
+3. Copy the generated API key.
+4. Create a `.env.local` file in the root directory.
+5. Insert the API key into the `.env.local` file as shown below:
 
-```
+```env
 FRAUD_API_URL=http://localhost:8000
-GEMINI_API_KEY=your_key_here
+GEMINI_API_KEY=your_api_key_here
 ```
 
 ---
