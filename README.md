@@ -1,28 +1,80 @@
 # DigitalTrust — Real-Time Fraud Shield for the Unbanked
 
-Next.js wallet simulator + FastAPI fraud engine focused on gig workers and unbanked vendors. Optimized for low digital literacy, offline resiliency, and explainable fraud controls.
+**Hackathon submission — polished demo & judge-ready notes**
 
-## Key Features (judge-facing)
-- **Daily Wage Vault vs Main Wallet**: Stricter thresholds on vault withdrawals; auto-locks on risk, auto-unlocks after approved biometric/OTP.
-- **Agentic AI Fraud Investigator**: BLOCK events trigger a Gemini-powered agent that writes a human-readable case report for the dashboard.
-- **Multilingual Voice-to-Transfer (NLP pillar)**: Mic button understands Malay/Indonesian phrases like “Tolong hantar lima puluh ringgit kat Ali”, builds JSON `{ amount, receiver }`, and routes through the fraud shield.
-- **Pre-Transaction Phishing Shield**: Recent scam-message signals boost risk and explainability before money moves.
-- **Edge / Offline Safe Mode**: When the model API is unreachable, a lightweight heuristic scorer still protects the vault and surfaces an “Edge Safe Mode” badge.
-- **Panic-free UX**: Calm copy, big buttons, trust badges, and Shield Coach nudges with clear, simple reasons.
+DigitalTrust is a demo wallet + fraud engine that protects gig workers and unbanked vendors with real-time, explainable fraud controls. It combines a Next.js mobile-first UI with a FastAPI risk scorer (LightGBM) and an LLM-powered agentic reporter for human-readable case summaries.
 
-## Stack
-- Frontend: Next.js App Router, Tailwind, Framer Motion, Zustand.
-- Fraud API: FastAPI (`fraud-detection-project/api/main.py`) + LightGBM artifacts.
-- Agent LLM: Gemini (via `GEMINI_API_KEY`) for case reports.
+---
 
-## Setup
-1) Install deps
+## TL;DR
+- Problem: Low-literacy users and gig workers need simple, fast protection against fraud without confusing UX.
+- Solution: A wallet that enforces a stricter *Daily Wage Vault*, pre-transaction phishing checks, an offline heuristic fallback, and an Agentic AI investigator that writes case reports for auditors.
+
+Try the demo: run the backend and frontend, open http://localhost:3000, then follow the quick demo scripts below.
+
+---
+
+## Why this matters (for judges)
+- Protects daily wages: Vault withdrawals are intentionally stricter to avoid catastrophic loss.
+- Explainability: Risk decisions surface concise reasons and a calm trust UX to reduce panic.
+- Robustness: When model APIs are unavailable, an on-device heuristic fallback keeps money safe.
+- Agentic reporting: BLOCK events produce a Gemini-written case report for fast human review.
+
+---
+
+## Key Features (Judge-Facing)
+- Daily Wage Vault vs Main Wallet: tighter thresholds, auto-lock on risk, guided unlock flows.
+- Real-time risk scoring: FastAPI + LightGBM returns FLAG/BLOCK decisions and explanation tokens.
+- Agentic AI Investigator: Gemini-powered agent assembles an investigation summary on BLOCK.
+- Multilingual Voice-to-Transfer: Malay/Indonesian voice parsing fills amount+receiver JSON payloads.
+- Pre-transaction Phishing Shield: uses recent message signals to raise risk before money moves.
+- Edge / Offline Safe Mode: heuristic scorer runs when the model endpoint is down.
+- Panic-free UX: large tap targets, calm copy, trust badges, and Shield Coach guidance.
+
+---
+
+## Architecture (high level)
+
+```mermaid
+graph LR
+  U[User Browser / Mobile UI]
+  U --> |"Send / Preview"| Frontend(app)
+  Frontend --> |"/api/risk-score"| FraudAPI[FastAPI Scorer]
+  FraudAPI --> |"LightGBM model"| ModelStore[(Model Artifacts)]
+  FraudAPI --> |"Agent request"| Gemini[Gemini Agent]
+  Gemini --> Frontend
+  Frontend --> |"Voice"| SpeechNLP[Voice-to-Transfer NLP]
+  note right of FraudAPI: Edge fallback to heuristic scorer
+```
+
+Files you will likely inspect first:
+- `fraud-detection-project/api/main.py` — FastAPI scorer entry.
+- `app/api/risk-score/route.ts` — frontend API route invoking policy logic.
+- `components/wallet/SendMoneyModal.tsx` — voice NLP + payload preview.
+- `components/wallet/RiskResultModal.tsx` — risk outcome modal & Agentic report display.
+
+---
+
+## Tech stack
+- Frontend: Next.js (App Router), TypeScript, Tailwind CSS, Framer Motion, Zustand
+- Backend: FastAPI (uvicorn), LightGBM model artifacts
+- Agent: Gemini LLM (via `GEMINI_API_KEY`) for human-readable case reports
+- Tooling: Node.js, npm, Python (venv)
+
+---
+
+## Quickstart (for judges)
+
+Prerequisites: Node >=16, Python 3.10+, npm, pip. On Windows use PowerShell or cmd.
+
+1) Install frontend deps
+
 ```bash
 npm install
 ```
 2) Environment
 ```
-FRAUD_API_URL=http://127.0.0.1:8000    # FastAPI scorer
+FRAUD_API_URL=http://localhost:8000    # FastAPI scorer
 GEMINI_API_KEY=your_gemini_key_here    # for Agentic AI reports
 ```
 Place in `.env.local` (already added with a sample key for local demos).
@@ -31,30 +83,67 @@ Place in `.env.local` (already added with a sample key for local demos).
 ```bash
 uvicorn main:app --reload --port 8000
 ```
-Make sure model artifacts exist (see `fraud-detection-project/README.md` for training if needed).
 
-4) Start frontend
+5) Start the frontend (root folder)
+
 ```bash
 npm run dev
 ```
-Open `http://localhost:3000`.
 
-## Demo scripts for judging
-- **Voice-to-Transfer (NLP pillar)**: Tap the mic and say  
-  `Tolong hantar lima puluh ringgit kat Ali` → amount/receiver auto-fill, JSON payload preview shows, send triggers fraud shield.
-- **Phishing shield + vault lock**: In browser DevTools run  
-  `localStorage.setItem('recent_msg_text','Your parcel is stuck, pay RM5 to unlock')`  
-  Then attempt a Vault cash-out. You should see: phishing reason added, possible FLAG/BLOCK, vault lock, and Agentic AI report.
-- **Agentic AI case report**: Force a BLOCK (high amount or suspicious device). Modal shows “Agentic AI Case Report” text generated by Gemini.
-- **Offline/Edge**: Stop the FastAPI server; repeat a transfer. UI shows Edge Safe Mode badge with heuristic scoring.
+Open `http://localhost:3000` in a browser.
 
-## File map (modified areas)
-- `app/api/risk-score/route.ts` — vault policy, phishing flag, edge fallback, agent report generation.
-- `app/wallet/page.tsx` — Vault/Main balances, lock/unlock, phishing hook, edge badges, trust coach.
-- `components/wallet/SendMoneyModal.tsx` — multilingual voice-to-transfer and NLP payload preview.
-- `components/wallet/RiskResultModal.tsx` — panic-free messaging, verification guidance, Agentic AI report display.
-- `store/index.ts` — shared state for vaults, risk outcomes, agent reports.
+Tip: There is a convenience `run.bat` at repository root for Windows that starts the dev environment; use if you prefer a single command.
 
-## Notes
-- Keep amounts realistic for gig workers to see nuanced FLAG vs BLOCK.
-- Vault withdrawals are stricter by design; fraud attempts lock the vault first to protect daily wages.***
+---
+
+## Demo scripts for judges (fast path)
+
+1) Voice-to-Transfer (NLP pillar)
+- Open the wallet send flow, tap the mic and say: `Tolong hantar lima puluh ringgit kat Ali`
+- Expect: amount + recipient auto-filled, JSON preview shown, and the transfer goes through the fraud shield for scoring.
+
+2) Phishing shield + Vault lock
+- In DevTools Console run:
+
+```js
+localStorage.setItem('recent_msg_text','Your parcel is stuck, pay RM5 to unlock')
+```
+- Then attempt a Vault cash-out. Expect: phishing reason added to risk details, possible FLAG/BLOCK, and vault auto-lock.
+
+3) Agentic AI case report
+- Force a BLOCK by sending a high amount or modifying device attributes in DevTools. On BLOCK the RiskResult modal includes an "Agentic AI Case Report" section (text generated by Gemini).
+
+4) Edge / Offline
+- Stop the FastAPI server, then attempt a transfer. Expect: UI shows "Edge Safe Mode" badge and heuristic scoring with clear messaging.
+
+---
+
+## Judging checklist (what to test)
+- Real-time scoring: make a transaction and confirm a FLAG/BLOCK decision appears quickly.
+- Explainability: risk modal shows readable reasons and suggested next steps.
+- Voice-to-Transfer: Malay/Indonesian phrase parsing returns correct JSON.
+- Offline resilience: stop backend and confirm Edge Safe Mode engages.
+- Agentic reporting: confirm a human-readable case report on BLOCK events.
+
+---
+
+## Implementation notes
+- LightGBM artifacts live in `fraud-detection-project/models` (trained separately).
+- The Gemini agent is called only for BLOCK-level events to avoid unnecessary API use.
+- Vault policies live in `app/api/risk-score/route.ts` and are intentionally stricter than main-wallet rules.
+
+---
+
+## How to evaluate performance locally
+- Measure request/response times against `FRAUD_API_URL` (should be near-instant for small models). Use browser Network tab for latency.
+
+---
+
+## Contribution, license, and contact
+This repository was built for a hackathon and is MIT-licensed for demo purposes. Credit: the hackathon team (see `package.json` for contributors).
+
+Demo video (Google Drive): [Watch demo](https://drive.google.com/file/d/1IA_hq-3EUt7DUhPzXzmHYa0d7N4P0wLG/view?usp=sharing)
+
+---
+
+Thank you for reviewing DigitalTrust.
